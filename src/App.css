@@ -496,6 +496,27 @@ select.setting-input { appearance:none;background-image:url("data:image/svg+xml,
 /* Header left fix */
 .header-left { display:flex;align-items:center;gap:16px; }
 
+/* === API WARNING === */
+.api-warning { display:flex;align-items:center;justify-content:space-between;padding:8px 20px;background:rgba(160,88,88,0.12);border-bottom:1px solid rgba(160,88,88,0.2);font-size:12px;color:var(--danger); }
+.api-warn-btn { padding:4px 12px;border-radius:var(--radius-sm);border:1px solid var(--danger-dim);background:rgba(160,88,88,0.1);color:var(--danger);cursor:pointer;font-family:var(--font-sans);font-size:11px; }
+
+/* === TUTORIAL === */
+.tutorial-modal { width:480px;border-radius:var(--radius-xl);padding:var(--space-lg); }
+.tutorial-header { display:flex;align-items:center;gap:12px;margin-bottom:var(--space-md); }
+.tutorial-icon { width:44px;height:44px;border-radius:var(--radius-lg);background:rgba(112,148,186,0.08);display:flex;align-items:center;justify-content:center;border:1px solid var(--border-default); }
+.tutorial-step-text { font-size:11px;color:var(--text-dim); }
+.tutorial-body { padding:var(--space-md) 0; }
+.tutorial-text { font-size:14px;line-height:2;color:var(--text-secondary);white-space:pre-line; }
+.tutorial-footer { display:flex;align-items:center;justify-content:space-between;margin-top:var(--space-md);padding-top:var(--space-md);border-top:1px solid var(--border-subtle); }
+.tutorial-dots { display:flex;gap:6px; }
+.tutorial-dot { width:8px;height:8px;border-radius:50%;background:var(--border-default);transition:all var(--duration-fast); }
+.tutorial-dot.active { background:var(--accent);width:20px;border-radius:100px; }
+.tutorial-dot.done { background:var(--text-dim); }
+.tutorial-btns { display:flex;gap:8px; }
+
+/* === DICE NARRATIVE === */
+.dice-narrative { font-size:12px;color:var(--text-secondary);margin-top:4px;width:100%; }
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 900px) {
   .sidebar { width: 60px; min-width: 60px; padding: var(--space-md) var(--space-sm); }

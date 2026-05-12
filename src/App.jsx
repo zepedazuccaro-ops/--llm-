@@ -9,6 +9,7 @@ import { createSave, exportSave, importSaveFile, validateSave } from './systems/
 import ClockDisplay from './components/ClockDisplay.jsx';
 import DiceRoller from './components/DiceRoller.jsx';
 import NPCCreator from './components/NPCCreator.jsx';
+import Tutorial from './components/Tutorial.jsx';
 
 // === UTILITY ===
 let toastId = 0;
@@ -397,20 +398,34 @@ function SearchPanel({ open, onClose, toast }) {
 // === CHARACTER CREATION MODAL ===
 function CharacterCreation({ open, onClose, onCreate, toast }) {
   if (!open) return null;
-  const [name, setName] = useState(''), [pts, setPts] = useState(15);
-  const [stats, setStats] = useState({atk:5,def:5,spd:5,int:5,luk:5});
+  const [name, setName] = useState(''), [pts, setPts] = useState(40);
+  const [stats, setStats] = useState({str:50,con:50,siz:50,dex:50,app:50,int:50,pow:50,edu:50});
+  const [portrait, setPortrait] = useState('');
+  const [customSkills, setCustomSkills] = useState('');
   const ripple = useRipple();
 
   const adjust = (key, delta) => {
-    if (pts-delta<0||stats[key]+delta<1||stats[key]+delta>20) return;
+    if (pts-delta<0||stats[key]+delta<5||stats[key]+delta>95) return;
     setStats(prev=>({...prev,[key]:prev[key]+delta})); setPts(prev=>prev-delta);
   };
 
   const create = () => {
     if (!name.trim()) { toast('warning','请输入角色名称'); return; }
-    onCreate({ name:name.trim(), baseStats:{...stats}, title:'冒险者 · 新手', level:1, hp:200, maxHp:200, mp:50, maxMp:50, exp:0, expToNext:100,
+    const finalStats = {...stats};
+    const hp = Math.floor((finalStats.con+finalStats.siz)/10);
+    const san = finalStats.pow;
+    // Parse custom skills
+    const extraSkills = {};
+    if (customSkills.trim()) {
+      customSkills.split(',').forEach(s=>{
+        const [sk,val] = s.split(':').map(x=>x.trim());
+        if (sk&&val) extraSkills[sk] = parseInt(val)||0;
+      });
+    }
+    onCreate({ name:name.trim(), attributes:finalStats, title:'冒险者 · 新手', level:1, hp, maxHp:hp, mp:finalStats.pow, maxMp:finalStats.pow,
+      san, maxSan:san, exp:0, expToNext:100, portrait:portrait||'', skills:{...extraSkills},
       equipment:{weapon:null,armor:null,accessory:null} });
-    toast('success',`角色「${name.trim()}」创建成功！`);
+    toast('success',`角色「${name.trim()}」创建成功！HP:${hp} SAN:${san}`);
     onClose();
   };
 
@@ -421,15 +436,20 @@ function CharacterCreation({ open, onClose, onCreate, toast }) {
         <div className="settings-body">
           <label className="setting-label">角色名称</label>
           <input className="setting-input" value={name} onChange={e=>setName(e.target.value)} placeholder="输入你的角色名..." />
-          <label className="setting-label">属性分配 (剩余点数: {pts})</label>
+          <label className="setting-label">角色立绘 (图片URL)</label>
+          <input className="setting-input" value={portrait} onChange={e=>setPortrait(e.target.value)} placeholder="粘贴图片URL或留空使用默认头像..." />
+          <label className="setting-label">COC属性分配 (剩余: {pts}点, 范围5-95)</label>
           <div className="stat-alloc">
             {Object.entries(stats).map(([k,v])=><div key={k} className="alloc-row">
-              <span className="alloc-label">{k==='atk'?'攻击':k==='def'?'防御':k==='spd'?'速度':k==='int'?'智力':'幸运'}</span>
-              <button className="alloc-btn ripple-container" onClick={e=>{ripple(e);adjust(k,-1);}}>-</button>
+              <span className="alloc-label">{{str:'力量',con:'体质',siz:'体型',dex:'敏捷',app:'外貌',int:'智力',pow:'意志',edu:'教育'}[k]}</span>
+              <button className="alloc-btn ripple-container" onClick={e=>{ripple(e);adjust(k,-5);}}>-5</button>
               <span className="alloc-val">{v}</span>
-              <button className="alloc-btn ripple-container" onClick={e=>{ripple(e);adjust(k,1);}}>+</button>
+              <button className="alloc-btn ripple-container" onClick={e=>{ripple(e);adjust(k,5);}}>+5</button>
             </div>)}
           </div>
+          <label className="setting-label">自定义技能 (格式: 技能名:数值, ...)</label>
+          <input className="setting-input" value={customSkills} onChange={e=>setCustomSkills(e.target.value)}
+            placeholder="例如: 大提琴:65, 炼金术:50, 厨艺:45" />
           <button className="btn-save ripple-container" onClick={e=>{ripple(e);create();}}>创建角色</button>
         </div>
       </div>
@@ -486,19 +506,30 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
 }
 
 // === HEADER ===
-function Header({ player, gameTime, setGameTime }) {
+function Header({ player, gameTime, setGameTime, hasApi }) {
   return (
-    <header className="header glass-light">
-      <div className="header-left">
-        <div className="player-badge"><div className="player-avatar-sm">{player.name[0]}</div><div><span className="player-name-sm">{player.name}</span><span className="player-title-sm">{player.title}</span></div></div>
-      </div>
-      <ClockDisplay gameTime={gameTime} setGameTime={setGameTime} />
-      <div className="header-stats">
-        <div className="header-stat"><Heart size={14} color="var(--danger)"/><span>{player.hp}/{player.maxHp}</span></div>
-        <div className="header-stat"><Zap size={14} color="#7b8fba"/><span>{player.mp}/{player.maxMp}</span></div>
-        <div className="header-stat"><Star size={14} color="var(--warning)"/><span>Lv.{player.level}</span></div>
-      </div>
-    </header>
+    <>
+      {!hasApi && (
+        <div className="api-warning">
+          <span>未配置API Key — 当前使用Mock模式运行。点击侧边栏「API设置」接入LLM获得AI剧情生成。</span>
+          <button className="api-warn-btn ripple-container" onClick={()=>{}}>⚙ 前往设置</button>
+        </div>
+      )}
+      <header className="header glass-light">
+        <div className="header-left">
+          <div className="player-badge">
+            <div className="player-avatar-sm" style={player.portrait?{backgroundImage:`url(${player.portrait})`,backgroundSize:'cover'}:{}}>{!player.portrait&&player.name[0]}</div>
+            <div><span className="player-name-sm">{player.name}</span><span className="player-title-sm">{player.title}</span></div>
+          </div>
+        </div>
+        <ClockDisplay gameTime={gameTime} setGameTime={setGameTime} />
+        <div className="header-stats">
+          <div className="header-stat"><Heart size={14} color="var(--danger)"/><span>{player.hp}/{player.maxHp}</span></div>
+          <div className="header-stat">SAN {player.san!==undefined?player.san:'—'}/{player.maxSan||'—'}</div>
+          <div className="header-stat"><Star size={14} color="var(--warning)"/><span>Lv.{player.level}</span></div>
+        </div>
+      </header>
+    </>
   );
 }
 
@@ -524,6 +555,9 @@ export default function App() {
   });
   const [playerTalents, setPlayerTalents] = useState(()=>{
     const s = localStorage.getItem('llmgame_talents'); return s?JSON.parse(s):[];
+  });
+  const [tutorialOpen, setTutorialOpen] = useState(()=>{
+    return !localStorage.getItem('llmgame_tutorial_done');
   });
   const [player, setPlayer] = useState(()=>{
     const saved = localStorage.getItem('llmgame_player');
@@ -692,7 +726,7 @@ export default function App() {
         diceOpen={diceOpen} setDiceOpen={setDiceOpen} npcCreatorOpen={npcCreatorOpen} setNpcCreatorOpen={setNpcCreatorOpen}
         quests={quests} onExport={handleExport} onImport={handleImport} />
       <div className="main-area">
-        <Header player={player} gameTime={gameTime} setGameTime={setGameTime} />
+        <Header player={player} gameTime={gameTime} setGameTime={setGameTime} hasApi={!!getConfig().apiKey} />
         <main className="content">
           {screen==='story'&&<StoryPanel storyLog={storyLog} playerInput={playerInput} setPlayerInput={setPlayerInput}
             onSend={handleSend} isLoading={isLoading} />}
@@ -714,6 +748,7 @@ export default function App() {
         onCreate={(newChar)=>{setPlayer({...newChar,equipment:{weapon:null,armor:null,accessory:null},hp:newChar.maxHp,mp:newChar.maxMp});setInventory({...startingInventory});setStoryLog([{role:'narrator',content:`欢迎，${newChar.name}。你踏入了深渊边境的迷雾之中，一段全新的冒险即将开始。\n\n雾中隐约可见一个三岔路口。远处有一座旧神社的鸟居轮廓。你的故事，从此刻开始书写。`}]);setCurrentNodeId('crossroads');setScreen('story');}}
         toast={toast} />
       <SettingsModal open={settingsOpen} onClose={()=>setSettingsOpen(false)} toast={toast} />
+        <Tutorial open={tutorialOpen} onClose={()=>{setTutorialOpen(false);localStorage.setItem('llmgame_tutorial_done','1');}} />
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
