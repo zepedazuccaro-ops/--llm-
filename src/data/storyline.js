@@ -103,12 +103,12 @@ export function canTakeTalent(talent, player) {
 
 // === NPC Templates for player creation ===
 export const npcTemplates = {
-  merchant: { name:'旅行商人', personality:'精明但友善，喜欢讨价还价',
+  merchant: { name:'旅行商人', gender:'男', age:'35', occupation:'行商', personality:'精明但友善，喜欢讨价还价，对陌生人保持警惕但很容易被真诚打动',
     dialogPreset:['欢迎光临！','这个可是稀有货哦','小心保管好你的钱包'], icon:'ShoppingBag' },
-  warrior: { name:'流浪剑士', personality:'沉默寡言，重视荣誉',
+  warrior: { name:'流浪剑士', gender:'女', age:'24', occupation:'佣兵', personality:'沉默寡言，重视荣誉，对弱者会不自觉地保护，内心深处有一段不愿提及的往事',
     dialogPreset:['……','要过两招吗？','这片土地不适合弱者'], icon:'Swords' },
-  sage: { name:'边境学者', personality:'好奇心旺盛，喜欢长篇大论',
+  sage: { name:'边境学者', gender:'男', age:'52', occupation:'研究者', personality:'好奇心旺盛，喜欢长篇大论，对知识有近乎偏执的追求，讨厌被打断',
     dialogPreset:['让我看看这个……有意思','根据我的研究……','知识就是力量！'], icon:'GraduationCap' },
-  mystic: { name:'神秘旅人', personality:'说话含糊，喜欢打哑谜',
+  mystic: { name:'神秘旅人', gender:'女', age:'?', occupation:'占卜师', personality:'说话含糊，喜欢打哑谜，看似随意的话语中往往藏着重要的提示',
     dialogPreset:['命运之风正在改变……','你不知道前方有什么','有些秘密还是不要追问的好'], icon:'Moon' },
 };

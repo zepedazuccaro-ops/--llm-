@@ -363,25 +363,36 @@ function NPCDialog({ npc, onClose, onTrade, onAcceptQuest, playerQuests, toast }
   );
 }
 
-// === SEARCH PANEL ===
+// === SEARCH PANEL (fixed) ===
 function SearchPanel({ open, onClose, toast }) {
   if (!open) return null;
   const [query, setQuery] = useState(''), [results, setResults] = useState(null), [loading, setLoading] = useState(false), ripple = useRipple();
 
   const search = async () => {
     if (!query.trim()) return;
-    setLoading(true);
+    setLoading(true); setResults(null);
     try {
-      const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(query+' 天启预报 novel')}`);
-      const text = await res.text();
-      const snippets = text.match(/class="result__snippet"[^>]*>(.*?)<\/a>/gi)||[];
-      const items = snippets.slice(0,5).map((s,i)=>{
-        const clean = s.replace(/<[^>]+>/g,'').slice(0,200);
-        return {title:`结果 ${i+1}`,snippet:clean,url:''};
-      });
-      setResults(items.length?items:[{title:'未找到结果',snippet:'尝试更换搜索词或检查网络连接。'}]);
+      // Use DuckDuckGo Instant Answer API (no CORS issues)
+      const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+      const res = await fetch(ddgUrl);
+      const data = await res.json();
+
+      const items = [];
+      if (data.AbstractText) items.push({title:data.Heading||'摘要',snippet:data.AbstractText,url:data.AbstractURL||''});
+      if (data.RelatedTopics?.length) {
+        data.RelatedTopics.slice(0,8).forEach(t => {
+          if (t.Text) items.push({title:'相关',snippet:t.Text.slice(0,200),url:t.FirstURL||''});
+        });
+      }
+      // Fallback: open a search in new tab
+      if (items.length===0) {
+        items.push({title:'在浏览器中搜索',snippet:`点击此处在新标签页中搜索「${query}」`,url:`https://duckduckgo.com/?q=${encodeURIComponent(query)}`});
+      }
+      setResults(items.slice(0,8));
     } catch(e) {
-      setResults([{title:'搜索失败',snippet:e.message}]);
+      // Ultimate fallback
+      setResults([{title:'在浏览器中搜索',snippet:`点击此处在新标签页中搜索「${query}」`,url:`https://duckduckgo.com/?q=${encodeURIComponent(query)}`}]);
+      toast('info','API搜索不可用，提供浏览器搜索链接');
     } finally { setLoading(false); }
   };
 
@@ -534,7 +545,20 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
       <div className="sidebar-quests"><div className="quests-title">任务</div>
         {quests.map(q=><div key={q.id} className={`quest-item ${q.status}`}><div className="quest-name">{q.name}</div><div className="quest-progress">{q.progress}</div></div>)}
       </div>
-      <div className="sidebar-footer"><button className="nav-btn ripple-container" onClick={()=>setOpen(true)}><Settings size={16}/><span>API设置</span></button></div>
+      <div className="sidebar-footer">
+        <div className="style-quick">
+          <label className="setting-label" style={{fontSize:10}}>文风 (影响AI输出)</label>
+          <input className="setting-input" style={{fontSize:11,padding:'4px 8px'}} value={localStorage.getItem('llmgame_style')||''}
+            onChange={e=>{localStorage.setItem('llmgame_style',e.target.value);}}
+            placeholder="简洁冷峻, 每段2-4句, 200-400字"/>
+          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
+            <input type="checkbox" id="autoDice" checked={localStorage.getItem('llmgame_autodice')!=='false'}
+              onChange={e=>{localStorage.setItem('llmgame_autodice',e.target.checked);window.location.reload();}}/>
+            <label htmlFor="autoDice" style={{fontSize:10,color:'var(--text-dim)'}}>自动发送骰值</label>
+          </div>
+        </div>
+        <button className="nav-btn ripple-container" onClick={()=>setOpen(true)}><Settings size={16}/><span>API设置</span></button>
+      </div>
     </aside>
   );
 }
@@ -594,6 +618,8 @@ export default function App() {
   const [quickReplies, setQuickReplies] = useState(null);
   const [apiError, setApiError] = useState('');
   const [apiEnabled, setApiEnabled] = useState(!!getConfig().apiKey);
+  const [writingStyle, setWritingStyle] = useState(()=>localStorage.getItem('llmgame_style')||'');
+  const [autoSendDice, setAutoSendDice] = useState(()=>localStorage.getItem('llmgame_autodice')!=='false');
   const [player, setPlayer] = useState(()=>{
     const saved = localStorage.getItem('llmgame_player');
     if (saved) try {return JSON.parse(saved);} catch(e){}
@@ -704,14 +730,20 @@ export default function App() {
     setQuickReplies(null);
 
     // Auto dice check for actions
-    const diceResult = skillCheck(50); // Default 50% base
+    const diceResult = skillCheck(50);
     const eff = narrativeEffect(diceResult, 'exploration');
-    const diceMsg = diceResult.level!=='regular' ? `[骰子: ${diceResult.roll} vs 50 → ${diceResult.level==='extreme'?'极难成功':diceResult.level==='hard'?'困难成功':diceResult.level}]\n` : '';
+    const diceMsg = autoSendDice ? `[系统骰子检定: ${diceResult.roll} vs 50 → ${diceResult.level}] ${eff.text||''}\n` : '';
+
+    // Build system prompt with writing style
+    const sysPrompt = writingStyle
+      ? `你是一个沉浸式文字冒险RPG的游戏主持人。${writingStyle}\n\n请以第二人称叙述，每次回复后在末尾提供3个行动选项，格式为[选项] 行动描述。`
+      : '你是一个沉浸式文字冒险RPG的游戏主持人。请以第二人称叙述，每次回复后在末尾提供3个行动选项，格式为[选项] 行动描述。';
 
     try {
       const cfg = getConfig();
       if (cfg.apiKey && apiEnabled) {
-        const resp = await sendGameMessage({storyLog:[...storyLog,{role:'player',content:input}],playerInput:input});
+        const resp = await sendGameMessage({storyLog:[...storyLog,{role:'player',content:input}],playerInput:input,
+          systemPrompt: sysPrompt});
         // Generate quick reply options from [选项] tags
         const optionMatch = resp.match(/\[选项\](.*?)(?=\[选项\]|$)/gs)||[];
         const options = optionMatch.map(o=>o.replace('[选项]','').trim()).filter(Boolean);

@@ -6,6 +6,10 @@ export default function NPCCreator({ open, onClose, onCreateNpc, gameNpcs }) {
   if (!open) return null;
   const [name, setName] = useState('');
   const [personality, setPersonality] = useState('');
+  const [gender, setGender] = useState('未指定');
+  const [age, setAge] = useState('');
+  const [occupation, setOccupation] = useState('');
+  const [appearance, setAppearance] = useState('');
   const [icon, setIcon] = useState('User');
   const [location, setLocation] = useState('crossroads');
   const [dialogs, setDialogs] = useState(['']);
@@ -15,6 +19,8 @@ export default function NPCCreator({ open, onClose, onCreateNpc, gameNpcs }) {
     setName(tpl.name); setPersonality(tpl.personality);
     setDialogs(tpl.dialogPreset||['']);
     setIcon(tpl.icon||'User');
+    setGender(tpl.gender||'未指定');
+    setAge(tpl.age||''); setOccupation(tpl.occupation||'');
     setShowCustom(true);
   };
 
@@ -25,11 +31,14 @@ export default function NPCCreator({ open, onClose, onCreateNpc, gameNpcs }) {
     if (!name.trim()) return;
     const npc = {
       id: `custom_${Date.now()}`, name: name.trim(), icon, location,
-      desc: personality || '一位神秘的旅行者。',
+      gender, age: age||'?', occupation: occupation||'未知',
+      appearance: appearance||'',
+      desc: personality || `一位${age||'...'}岁的${occupation||'旅行者'}。${appearance||''}`,
+      personality, // AI personality prompt
       dialogs: {
         greeting: dialogs[0] || `你好，我是${name}。`,
         topics: dialogs.slice(1).reduce((acc, d, i) => {
-          if (d.trim()) acc[`对话选项 ${i+1}`] = d.trim();
+          if (d.trim()) acc[`话题 ${i+1}`] = d.trim();
           return acc;
         }, {}),
       },
@@ -54,8 +63,19 @@ export default function NPCCreator({ open, onClose, onCreateNpc, gameNpcs }) {
           {showCustom && <>
             <label className="setting-label">NPC 名称</label>
             <input className="setting-input" value={name} onChange={e=>setName(e.target.value)} placeholder="输入NPC名称"/>
-            <label className="setting-label">性格描述</label>
-            <input className="setting-input" value={personality} onChange={e=>setPersonality(e.target.value)} placeholder="精明但友善，喜欢讨价还价..."/>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+              <div><label className="setting-label">性别</label>
+                <select className="setting-input" value={gender} onChange={e=>setGender(e.target.value)}>
+                  <option>未指定</option><option>男</option><option>女</option><option>其他</option></select></div>
+              <div><label className="setting-label">年龄</label>
+                <input className="setting-input" value={age} onChange={e=>setAge(e.target.value)} placeholder="28"/></div>
+              <div><label className="setting-label">职业</label>
+                <input className="setting-input" value={occupation} onChange={e=>setOccupation(e.target.value)} placeholder="旅行商人"/></div>
+            </div>
+            <label className="setting-label">外貌描述</label>
+            <input className="setting-input" value={appearance} onChange={e=>setAppearance(e.target.value)} placeholder="高个子，长发，戴着斗笠..."/>
+            <label className="setting-label">性格与行为描述 (AI行为依据)</label>
+            <textarea className="setting-input" value={personality} onChange={e=>setPersonality(e.target.value)} placeholder="精明但友善，喜欢讨价还价，对陌生人保持警惕..." style={{minHeight:50}}/>
             <label className="setting-label">出现地点</label>
             <select className="setting-input" value={location} onChange={e=>setLocation(e.target.value)}>
               <option value="crossroads">十字路口</option><option value="shrine">水无月神社</option>
