@@ -410,7 +410,10 @@
 .alloc-val { width:40px;text-align:center;font-size:15px;font-weight:600;color:var(--text-bright);font-variant-numeric:tabular-nums;font-family:var(--font-mono); }
 
 /* ==================== TOAST ==================== */
-.toast-container { position:fixed;bottom:24px;right:24px;z-index:99999;display:flex;flex-direction:column;gap:8px;pointer-events:none; }
+.toast-container { position:fixed;bottom:24px;right:24px;z-index:100000;display:flex;flex-direction:column;gap:8px;pointer-events:none; }
+.toast-container * { pointer-events:none; }
+.toast-item { pointer-events:auto; }
+.toast-item .toast-close { pointer-events:auto; }
 .toast-item {
   padding:10px 18px;border-radius:var(--radius-md);font-size:13px;font-weight:500;
   color:var(--text-bright);min-width:200px;max-width:340px;display:flex;align-items:center;justify-content:space-between;
@@ -546,6 +549,15 @@ select.setting-input { appearance:none;background-image:url("data:image/svg+xml,
 .settings-recommend { margin-top:var(--space-md);padding:var(--space-md);background:rgba(112,148,186,0.04);border-radius:var(--radius-lg);border:1px solid var(--border-subtle); }
 .settings-recommend strong { font-size:13px;color:var(--accent);display:block;margin-bottom:4px; }
 .settings-recommend p { font-size:11px;color:var(--text-dim);line-height:1.7;font-family:var(--font-mono); }
+
+/* === NPC DIALOG ENHANCEMENTS === */
+.npc-info-bar { font-size:11px;color:var(--text-dim);margin-bottom:var(--space-sm);display:flex;gap:4px; }
+.npc-chat-log { max-height:280px;overflow-y:auto;margin-bottom:var(--space-md);display:flex;flex-direction:column;gap:8px; }
+.npc-chat-msg { padding:6px 10px;border-radius:var(--radius-md);font-size:13px;line-height:1.7; }
+.npc-chat-msg.player { background:rgba(112,148,186,0.06);align-self:flex-end;max-width:80%; }
+.npc-chat-msg.narrator { background:rgba(255,255,255,0.02);align-self:flex-start;max-width:85%;border-left:2px solid var(--accent); }
+.npc-chat-label { font-size:10px;font-weight:600;color:var(--text-dim);display:block;margin-bottom:2px; }
+.npc-chat-input-row { display:flex;gap:6px;margin-top:var(--space-md); }
 
 /* === SANITY DISPLAY === */
 .header-stat:has(span) { font-size:12px;color:var(--text-dim); }
