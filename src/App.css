@@ -426,13 +426,84 @@
 .btn-npc { display:flex;align-items:center;gap:6px;width:100%;padding:7px;background:rgba(107,139,107,0.08);border:1px solid rgba(107,139,107,0.2);border-radius:var(--radius-md);color:var(--success);font-family:var(--font-sans);font-size:12px;cursor:pointer;justify-content:center;transition:all var(--duration-fast) var(--ease-out-expo);margin-bottom:6px; }
 .btn-npc:hover { background:rgba(107,139,107,0.15); }
 
+/* ==================== CLOCK DISPLAY ==================== */
+.clock-display { display:flex;align-items:center;gap:16px; }
+.clock-item { display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums; }
+.clock-time { color:var(--text-secondary);font-family:var(--font-mono); }
+.clock-period { font-size:10px;color:var(--accent);padding:0 6px;border:1px solid var(--border-default);border-radius:100px; }
+
+/* ==================== DICE ROLLER ==================== */
+.dice-modal { width:480px;max-height:80vh;overflow-y:auto;border-radius:var(--radius-xl);padding:var(--space-lg); }
+.dice-body { margin-top:var(--space-md); }
+.dice-tabs { display:flex;gap:4px;margin-bottom:var(--space-md); }
+.dice-tab { flex:1;padding:8px;border-radius:var(--radius-md);border:1px solid var(--border-default);background:transparent;color:var(--text-secondary);cursor:pointer;font-family:var(--font-sans);font-size:13px;transition:all var(--duration-fast); }
+.dice-tab:hover { border-color:var(--border-emphasis); }
+.dice-tab.active { border-color:var(--accent);background:rgba(112,148,186,0.08);color:var(--accent); }
+.dice-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:var(--space-md); }
+.dice-grid-basic { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:var(--space-md); }
+.dice-btn { display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:var(--radius-md);border:1px solid var(--border-default);cursor:pointer;font-family:var(--font-mono);font-size:14px;font-weight:600;color:var(--text-primary);transition:all var(--duration-fast); }
+.dice-btn:hover { border-color:var(--accent);background:rgba(112,148,186,0.08); }
+.dice-result { display:flex;align-items:center;gap:10px;padding:var(--space-md);border-radius:var(--radius-lg);margin:var(--space-md) 0;flex-wrap:wrap; }
+.dice-result.crit { border-color:var(--warning);box-shadow:0 0 12px rgba(155,155,96,0.15); }
+.dice-result.fumble { border-color:var(--danger); }
+.result-label { font-size:13px;color:var(--text-dim); }
+.result-value { font-size:28px;font-weight:700;color:var(--text-bright);font-family:var(--font-mono); }
+.result-value.crit-text { color:var(--warning); }
+.result-value.fumble-text { color:var(--danger); }
+.result-detail { font-size:12px;color:var(--text-dim); }
+.crit-badge { font-size:11px;color:var(--warning);font-weight:600;padding:2px 8px;border:1px solid var(--warning);border-radius:100px; }
+.fumble-badge { font-size:11px;color:var(--danger);font-weight:600;padding:2px 8px;border:1px solid var(--danger);border-radius:100px; }
+
+/* Attribute mods */
+.attr-mods { display:grid;grid-template-columns:repeat(3,1fr);gap:4px; }
+.attr-mod-item { display:flex;align-items:center;gap:4px;padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:var(--radius-sm);font-size:12px; }
+.attr-mod-name { color:var(--text-dim);width:32px; }
+.attr-mod-score { color:var(--text-bright);font-weight:600;width:16px;text-align:center;font-family:var(--font-mono); }
+.attr-mod-val { font-weight:700; }
+.attr-mod-val.positive { color:var(--success); }
+.attr-mod-val.negative { color:var(--danger); }
+
+/* Skill rolls */
+.skill-rolls { display:grid;grid-template-columns:1fr 1fr;gap:4px;max-height:300px;overflow-y:auto; }
+.skill-row { display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(255,255,255,0.015);border-radius:var(--radius-sm);cursor:pointer;font-size:12px;transition:all var(--duration-fast); }
+.skill-row:hover { background:rgba(112,148,186,0.06); }
+.skill-name { color:var(--text-secondary); }
+.skill-attr { color:var(--text-dim);font-family:var(--font-mono);font-size:11px; }
+
+/* ==================== SIDEBAR ACTIONS ==================== */
+.sidebar-actions { display:flex;flex-direction:column;gap:2px;padding:var(--space-sm) 0;border-top:1px solid var(--border-subtle);border-bottom:1px solid var(--border-subtle);margin:var(--space-sm) 0; }
+.sidebar-actions .nav-btn { font-size:12px; }
+.sidebar-actions .nav-btn span { font-size:12px; }
+
+/* ==================== NPC CREATOR ==================== */
+.npc-templates { display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:var(--space-sm) 0; }
+.tpl-btn { padding:10px;border-radius:var(--radius-md);border:1px solid var(--border-default);cursor:pointer;font-family:var(--font-sans);text-align:left;transition:all var(--duration-fast);display:flex;flex-direction:column; }
+.tpl-btn:hover { border-color:var(--accent);background:rgba(112,148,186,0.06); }
+.tpl-btn span:first-child { font-size:13px;color:var(--text-primary);font-weight:500; }
+.tpl-desc { font-size:11px;color:var(--text-dim);margin-top:2px; }
+
+/* ==================== DIALOG BEAUTIFICATION ==================== */
+.entry-wrap.narrator { position:relative; }
+.entry-wrap.narrator::before { content:'';position:absolute;left:-12px;top:4px;bottom:4px;width:2px;background:linear-gradient(to bottom,var(--accent),transparent);border-radius:1px; }
+.entry-wrap.player { position:relative; }
+.entry-wrap.player .entry-content { background:rgba(112,148,186,0.05);border:1px solid rgba(112,148,186,0.1);border-radius:var(--radius-lg);padding:10px 16px;max-width:75%;margin-left:auto; }
+.entry-wrap.player .entry-content p { color:var(--text-primary); }
+.entry-wrap.narrator .entry-content p { color:var(--text-secondary); }
+
+/* select dropdown styling */
+select.setting-input { appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23888898'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px; }
+
+/* Header left fix */
+.header-left { display:flex;align-items:center;gap:16px; }
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 900px) {
   .sidebar { width: 60px; min-width: 60px; padding: var(--space-md) var(--space-sm); }
-  .sidebar-logo span, .nav-btn span, .quests-title, .quest-item { display: none; }
+  .sidebar-logo span, .nav-btn span, .quests-title, .quest-item, .sidebar-actions .nav-btn span { display: none; }
   .nav-btn { justify-content: center; padding: 10px; }
   .inventory-drawer { width: 100vw; }
   .story-log { padding: var(--space-md); }
   .header-stats { gap: 10px; font-size: 12px; }
   .map-node .node-tooltip { width: 200px; left: auto; right: 0; transform: none; }
+  .clock-display { gap:8px; }
 }

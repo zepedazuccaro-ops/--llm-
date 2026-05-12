@@ -1,8 +1,14 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
-import { Menu, Swords, Map, BookOpen, Backpack, Settings, Send, X, Heart, Zap, Star, Crosshair, Shield, Swords as Atk, Footprints, Sparkles, FlaskRound, Droplets, Key, Diamond, UtensilsCrossed, Gem, Flame, Skull, Bug, CloudFog, Wind, Snowflake, Sword, Package, Circle, MapPin, User, Heart as HeartIcon, Trash2, Wrench, Plus, Search, Globe, Eye, UserPlus, RefreshCw } from 'lucide-react';
+import { Menu, Swords, Map, BookOpen, Backpack, Settings, Send, X, Heart, Zap, Star, Crosshair, Shield, Swords as Atk, Footprints, Sparkles, FlaskRound, Droplets, Key, Diamond, UtensilsCrossed, Gem, Flame, Skull, Bug, CloudFog, Wind, Snowflake, Sword, Package, Circle, MapPin, User, Heart as HeartIcon, Trash2, Wrench, Plus, Search, Globe, Eye, UserPlus, RefreshCw, Download, Upload, Dices, Users, Clock } from 'lucide-react';
 import './App.css';
 import { playerData, itemDatabase, startingInventory, mapNodes, npcs, monsters, playerSkills, sampleStoryLog, quests, sceneStories } from './data/mock.js';
 import { sendGameMessage, getConfig, updateConfig, loadConfig } from './api/llm.js';
+import { mainStory, branches, talents, canTakeTalent } from './data/storyline.js';
+import { initGameTime } from './systems/clock.js';
+import { createSave, exportSave, importSaveFile, validateSave } from './systems/save.js';
+import ClockDisplay from './components/ClockDisplay.jsx';
+import DiceRoller from './components/DiceRoller.jsx';
+import NPCCreator from './components/NPCCreator.jsx';
 
 // === UTILITY ===
 let toastId = 0;
@@ -454,7 +460,7 @@ function SettingsModal({ open, onClose, toast }) {
 }
 
 // === SIDEBAR ===
-function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, charOpen, setCharOpen, quests }) {
+function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, charOpen, setCharOpen, diceOpen, setDiceOpen, npcCreatorOpen, setNpcCreatorOpen, quests, onExport, onImport }) {
   return (
     <aside className="sidebar glass">
       <div className="sidebar-logo"><BookOpen size={20}/><span className="logo-text">深渊手札</span></div>
@@ -462,9 +468,15 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
         <button className={`nav-btn ripple-container ${screen==='story'?'active':''}`} onClick={()=>setScreen('story')}><BookOpen size={18}/><span>故事</span></button>
         <button className={`nav-btn ripple-container ${screen==='map'?'active':''}`} onClick={()=>setScreen('map')}><Map size={18}/><span>地图</span></button>
         <button className={`nav-btn ripple-container ${invOpen?'active':''}`} onClick={()=>setInvOpen(true)}><Backpack size={18}/><span>背包</span></button>
-        <button className={`nav-btn ripple-container`} onClick={()=>setSearchOpen(true)}><Globe size={18}/><span>搜索</span></button>
-        <button className={`nav-btn ripple-container`} onClick={()=>setCharOpen(true)}><UserPlus size={18}/><span>新角色</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setDiceOpen(true)}><Dices size={18}/><span>骰子</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setSearchOpen(true)}><Globe size={18}/><span>搜索</span></button>
       </nav>
+      <div className="sidebar-actions">
+        <button className="nav-btn ripple-container" onClick={onExport}><Download size={16}/><span>导出存档</span></button>
+        <button className="nav-btn ripple-container" onClick={onImport}><Upload size={16}/><span>导入存档</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setNpcCreatorOpen(true)}><Users size={16}/><span>创建NPC</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setCharOpen(true)}><UserPlus size={16}/><span>新角色</span></button>
+      </div>
       <div className="sidebar-quests"><div className="quests-title">任务</div>
         {quests.map(q=><div key={q.id} className={`quest-item ${q.status}`}><div className="quest-name">{q.name}</div><div className="quest-progress">{q.progress}</div></div>)}
       </div>
@@ -474,10 +486,13 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
 }
 
 // === HEADER ===
-function Header({ player }) {
+function Header({ player, gameTime, setGameTime }) {
   return (
     <header className="header glass-light">
-      <div className="player-badge"><div className="player-avatar-sm">{player.name[0]}</div><div><span className="player-name-sm">{player.name}</span><span className="player-title-sm">{player.title}</span></div></div>
+      <div className="header-left">
+        <div className="player-badge"><div className="player-avatar-sm">{player.name[0]}</div><div><span className="player-name-sm">{player.name}</span><span className="player-title-sm">{player.title}</span></div></div>
+      </div>
+      <ClockDisplay gameTime={gameTime} setGameTime={setGameTime} />
       <div className="header-stats">
         <div className="header-stat"><Heart size={14} color="var(--danger)"/><span>{player.hp}/{player.maxHp}</span></div>
         <div className="header-stat"><Zap size={14} color="#7b8fba"/><span>{player.mp}/{player.maxMp}</span></div>
@@ -500,7 +515,16 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [charOpen, setCharOpen] = useState(false);
   const [npcDialog, setNpcDialog] = useState(null);
+  const [diceOpen, setDiceOpen] = useState(false);
+  const [npcCreatorOpen, setNpcCreatorOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [gameTime, setGameTime] = useState(initGameTime);
+  const [customNpcs, setCustomNpcs] = useState(()=>{
+    const s = localStorage.getItem('llmgame_custom_npcs'); return s?JSON.parse(s):{};
+  });
+  const [playerTalents, setPlayerTalents] = useState(()=>{
+    const s = localStorage.getItem('llmgame_talents'); return s?JSON.parse(s):[];
+  });
   const [player, setPlayer] = useState(()=>{
     const saved = localStorage.getItem('llmgame_player');
     if (saved) try {return JSON.parse(saved);} catch(e){}
@@ -512,7 +536,11 @@ export default function App() {
     return {...startingInventory};
   });
 
-  useEffect(()=>{loadConfig();},[]);
+  // Merged NPCs (built-in + custom)
+  const allNpcs = useMemo(()=>({...npcs,...customNpcs}),[customNpcs]);
+
+  useEffect(()=>{localStorage.setItem('llmgame_custom_npcs',JSON.stringify(customNpcs));},[customNpcs]);
+  useEffect(()=>{localStorage.setItem('llmgame_talents',JSON.stringify(playerTalents));},[playerTalents]);
   useEffect(()=>{localStorage.setItem('llmgame_player',JSON.stringify(player));},[player]);
   useEffect(()=>{localStorage.setItem('llmgame_inventory',JSON.stringify(inventory));},[inventory]);
 
@@ -521,6 +549,27 @@ export default function App() {
     setTimeout(()=>setToasts(p=>p.filter(t=>t.id!==id)),3500);
   },[]);
   const removeToast = useCallback((id)=>setToasts(p=>p.filter(t=>t.id!==id)),[]);
+
+  // Initial load
+  useEffect(()=>{loadConfig();},[]);
+
+  // === SAVE / LOAD ===
+  const handleExport = useCallback(()=>{
+    const save = createSave(player, inventory, storyLog, currentNodeId, gameTime, quests, {});
+    const msg = exportSave(save); toast('success',msg);
+  },[player,inventory,storyLog,currentNodeId,gameTime,toast]);
+
+  const handleImport = useCallback(async ()=>{
+    try {
+      const data = await importSaveFile();
+      const v = validateSave(data); if (!v.valid) return toast('warning',v.reason);
+      setPlayer(data.player); setInventory(data.inventory||{...startingInventory});
+      setStoryLog(data.storyLog||sampleStoryLog);
+      setCurrentNodeId(data.currentNodeId||'crossroads');
+      if (data.gameTime) setGameTime(data.gameTime);
+      toast('success','存档加载成功！欢迎回来。');
+    } catch(e) { if(e!=='未选择文件') toast('danger',e.toString()); }
+  },[toast]);
 
   // === ITEM ACTIONS ===
   const handleUseItem = useCallback((itemId) => {
@@ -631,17 +680,24 @@ export default function App() {
       return {...prev,monster:m,playerState:pl};});
   },[player,toast]);
 
+  const handleCreateNpc = useCallback((npc) => {
+    setCustomNpcs(prev=>({...prev,[npc.id]:npc}));
+    toast('success',`NPC「${npc.name}」已创建在 ${npc.location}。`);
+  },[toast]);
+
   return (
     <div className="app-container">
       <Sidebar screen={screen} setScreen={setScreen} invOpen={invOpen} setInvOpen={setInvOpen} setOpen={setSettingsOpen}
-        searchOpen={searchOpen} setSearchOpen={setSearchOpen} charOpen={charOpen} setCharOpen={setCharOpen} quests={quests} />
+        searchOpen={searchOpen} setSearchOpen={setSearchOpen} charOpen={charOpen} setCharOpen={setCharOpen}
+        diceOpen={diceOpen} setDiceOpen={setDiceOpen} npcCreatorOpen={npcCreatorOpen} setNpcCreatorOpen={setNpcCreatorOpen}
+        quests={quests} onExport={handleExport} onImport={handleImport} />
       <div className="main-area">
-        <Header player={player} />
+        <Header player={player} gameTime={gameTime} setGameTime={setGameTime} />
         <main className="content">
           {screen==='story'&&<StoryPanel storyLog={storyLog} playerInput={playerInput} setPlayerInput={setPlayerInput}
             onSend={handleSend} isLoading={isLoading} />}
           {screen==='map'&&<MapPanel nodes={mapNodes} currentNodeId={currentNodeId} onTravel={handleTravel}
-            onNpcInteract={(id)=>setNpcDialog(npcs[id])} npcsHere={npcs} />}
+            onNpcInteract={(id)=>setNpcDialog(allNpcs[id])} npcsHere={allNpcs} />}
         </main>
       </div>
       <CombatModal combat={combat} onAction={handleCombatAction} onFlee={()=>{setCombat({active:false});toast('info','脱离了战斗');}} />
@@ -651,6 +707,8 @@ export default function App() {
       <NPCDialog npc={npcDialog} onClose={()=>setNpcDialog(null)} onTrade={handleTrade}
         onAcceptQuest={(q)=>{toast('success',`接受了委托「${q.name}」`);}}
         playerQuests={quests} toast={toast} />
+      <DiceRoller open={diceOpen} onClose={()=>setDiceOpen(false)} player={player} />
+      <NPCCreator open={npcCreatorOpen} onClose={()=>setNpcCreatorOpen(false)} onCreateNpc={handleCreateNpc} gameNpcs={customNpcs} />
       <SearchPanel open={searchOpen} onClose={()=>setSearchOpen(false)} toast={toast} />
       <CharacterCreation open={charOpen} onClose={()=>setCharOpen(false)}
         onCreate={(newChar)=>{setPlayer({...newChar,equipment:{weapon:null,armor:null,accessory:null},hp:newChar.maxHp,mp:newChar.maxMp});setInventory({...startingInventory});setStoryLog([{role:'narrator',content:`欢迎，${newChar.name}。你踏入了深渊边境的迷雾之中，一段全新的冒险即将开始。\n\n雾中隐约可见一个三岔路口。远处有一座旧神社的鸟居轮廓。你的故事，从此刻开始书写。`}]);setCurrentNodeId('crossroads');setScreen('story');}}
