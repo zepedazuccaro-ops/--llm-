@@ -530,6 +530,10 @@ function SettingsModal({ open, onClose, toast }) {
   const [mdl, setMdl] = useState(cfg.model);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState('');
+  const [maxTokens, setMaxTokens] = useState(()=>parseInt(localStorage.getItem('llmgame_maxtokens'))||4096);
+  const [ctxSize, setCtxSize] = useState(()=>parseInt(localStorage.getItem('llmgame_ctxsize'))||20);
+  const [hideThinkRegex, setHideThinkRegex] = useState(()=>localStorage.getItem('llmgame_hidethink')||'\\[THINKING\\][\\s\\S]*?\\[\\/THINKING\\]');
+  const [hideVarsRegex, setHideVarsRegex] = useState(()=>localStorage.getItem('llmgame_hidevars')||'\\[变量\\][\\s\\S]*?(?=\\[选项\\]|$)');
   const ripple = useRipple();
 
   const switchProvider = (pkey) => {
@@ -577,6 +581,20 @@ function SettingsModal({ open, onClose, toast }) {
           <label className="setting-label">API 端点</label><input className="setting-input" value={ep} onChange={e=>setEp(e.target.value)}/>
           <label className="setting-label">API Key</label><input className="setting-input" type="password" value={key} onChange={e=>setKey(e.target.value)}/>
           <label className="setting-label">模型</label><input className="setting-input" value={mdl} onChange={e=>setMdl(e.target.value)}/>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            <div><label className="setting-label">最大输出Token</label>
+              <input className="setting-input" type="range" min="256" max="8192" step="256" value={maxTokens}
+                onChange={e=>{setMaxTokens(e.target.value);localStorage.setItem('llmgame_maxtokens',e.target.value);}}/>
+              <span style={{fontSize:11,color:'var(--text-dim)'}}>{maxTokens}</span></div>
+            <div><label className="setting-label">上下文消息数</label>
+              <input className="setting-input" type="range" min="4" max="50" step="2" value={ctxSize}
+                onChange={e=>{setCtxSize(e.target.value);localStorage.setItem('llmgame_ctxsize',e.target.value);}}/>
+              <span style={{fontSize:11,color:'var(--text-dim)'}}>{ctxSize}条</span></div>
+          </div>
+          <label className="setting-label">隐藏思维链 (正则表达式)</label>
+          <input className="setting-input" value={hideThinkRegex} onChange={e=>{setHideThinkRegex(e.target.value);localStorage.setItem('llmgame_hidethink',e.target.value);}} placeholder="\[THINKING\][\s\S]*?\[\/THINKING\]"/>
+          <label className="setting-label">隐藏变量块 (正则表达式)</label>
+          <input className="setting-input" value={hideVarsRegex} onChange={e=>{setHideVarsRegex(e.target.value);localStorage.setItem('llmgame_hidevars',e.target.value);}} placeholder="\[变量\][\s\S]*?(?=\[选项\]|$)"/>
           <div style={{display:'flex',gap:8}}>
             <button className="btn-save ripple-container" onClick={e=>{ripple(e);updateConfig({baseURL:ep,apiKey:key,model:mdl});setApiKey(key);setApiEnabled(true);toast('success','设置已保存，API已自动启用');onClose();}} style={{flex:1}}>保存并启用</button>
             <button className="btn-save ripple-container" onClick={()=>testConnection()} disabled={testing} style={{flex:1,background:'var(--bg-elevated)',border:'1px solid var(--border-default)'}}>
@@ -692,6 +710,7 @@ function WorldBookEditor({ open, onClose, toast }) {
     return s?JSON.parse(s):worldBook.entries;
   });
   const [editIdx, setEditIdx] = useState(-1);
+  const [viewEntry, setViewEntry] = useState(null);
   const [newEntry, setNewEntry] = useState({keys:'',title:'',content:'',category:'world'});
 
   const save = () => {
@@ -721,9 +740,19 @@ function WorldBookEditor({ open, onClose, toast }) {
           <textarea className="setting-input" placeholder="条目内容" value={newEntry.content} onChange={e=>setNewEntry({...newEntry,content:e.target.value})} style={{minHeight:60}}/>
           <button className="btn-trade ripple-container" onClick={add} style={{marginBottom:8}}>添加条目</button>
           <div style={{maxHeight:300,overflowY:'auto'}}>
-            {entries.map((e,i)=><div key={i} className="trade-item glass-light" style={{marginBottom:4}}>
-              <div style={{flex:1}}><strong style={{fontSize:12}}>{e.title}</strong><span style={{fontSize:10,color:'var(--text-dim)',marginLeft:8}}>{e.category}</span></div>
-              <button className="api-copy-btn" onClick={()=>remove(i)} style={{fontSize:10}}>删除</button>
+            {entries.map((e,i)=><div key={i} className="trade-item glass-light" style={{marginBottom:4,cursor:'pointer',flexDirection:'column',alignItems:'flex-start'}}
+              onClick={()=>setViewEntry(viewEntry?.title===e.title?null:e)}>
+              <div style={{display:'flex',justifyContent:'space-between',width:'100%'}}>
+                <strong style={{fontSize:12}}>{e.title}</strong>
+                <span style={{fontSize:10,color:'var(--text-dim)'}}>{e.category}</span>
+              </div>
+              <div style={{fontSize:10,color:'var(--text-dim)',marginTop:2}}>触发词: {(Array.isArray(e.keys)?e.keys.join(', '):e.keys)}</div>
+              <button className="api-copy-btn" onClick={e=>{e.stopPropagation();remove(i);}} style={{fontSize:10,marginTop:4}}>删除</button>
+              {viewEntry?.title===e.title && (
+                <div className="wb-detail glass-light" style={{marginTop:8,padding:8,borderRadius:'var(--radius-md)',width:'100%'}}>
+                  <p style={{fontSize:12,lineHeight:1.8,color:'var(--text-secondary)'}}>{e.content}</p>
+                </div>
+              )}
             </div>)}
           </div>
           <button className="btn-save ripple-container" onClick={save} style={{marginTop:8}}>保存世界书</button>
