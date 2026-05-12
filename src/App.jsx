@@ -12,6 +12,7 @@ import ClockDisplay from './components/ClockDisplay.jsx';
 import DiceRoller from './components/DiceRoller.jsx';
 import NPCCreator from './components/NPCCreator.jsx';
 import Tutorial from './components/Tutorial.jsx';
+import PlayerProfile, { buildPlayerPersona } from './components/PlayerProfile.jsx';
 
 // === UTILITY ===
 let toastId = 0;
@@ -561,7 +562,7 @@ function SettingsModal({ open, onClose, toast }) {
 }
 
 // === SIDEBAR ===
-function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, charOpen, setCharOpen, diceOpen, setDiceOpen, npcCreatorOpen, setNpcCreatorOpen, quests, onExport, onImport }) {
+function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, npcCreatorOpen, setNpcCreatorOpen, profileOpen, setProfileOpen, quests, onExport, onImport }) {
   return (
     <aside className="sidebar glass">
       <div className="sidebar-logo"><BookOpen size={20}/><span className="logo-text">深渊手札</span></div>
@@ -575,7 +576,7 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
         <button className="nav-btn ripple-container" onClick={onExport}><Download size={16}/><span>导出存档</span></button>
         <button className="nav-btn ripple-container" onClick={onImport}><Upload size={16}/><span>导入存档</span></button>
         <button className="nav-btn ripple-container" onClick={()=>setNpcCreatorOpen(true)}><Users size={16}/><span>创建NPC</span></button>
-        <button className="nav-btn ripple-container" onClick={()=>setCharOpen(true)}><UserPlus size={16}/><span>新角色</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setProfileOpen(true)}><User size={16}/><span>人设</span></button>
       </div>
       <div className="sidebar-quests"><div className="quests-title">任务</div>
         {quests.map(q=><div key={q.id} className={`quest-item ${q.status}`}><div className="quest-name">{q.name}</div><div className="quest-progress">{q.progress}</div></div>)}
@@ -653,9 +654,13 @@ export default function App() {
   const [tutorialOpen, setTutorialOpen] = useState(()=>!localStorage.getItem('llmgame_tutorial_done'));
   const [quickReplies, setQuickReplies] = useState(null);
   const [apiError, setApiError] = useState('');
-  const [apiEnabled, setApiEnabled] = useState(!!getConfig().apiKey);
+  const [apiEnabled, setApiEnabled] = useState(()=>{
+    const key=localStorage.getItem('llmgame_apikey')||getConfig().apiKey;
+    return !!key;
+  });
   const [npcChatLog, setNpcChatLog] = useState([]);
   const [npcChatInput, setNpcChatInput] = useState('');
+  const [profileOpen, setProfileOpen] = useState(false);
   const [writingStyle, setWritingStyle] = useState(()=>localStorage.getItem('llmgame_style')||'');
   const [autoSendDice, setAutoSendDice] = useState(()=>localStorage.getItem('llmgame_autodice')!=='false');
   const [player, setPlayer] = useState(()=>{
@@ -783,6 +788,7 @@ export default function App() {
     const stylePrompt=style?`\n【文风要求】${style}\n`:'\n【文风要求】简洁冷峻的日系叙事，每段2-4句，注重光影/声音/气味描写，控制200-400字。\n';
     const sysPrompt=`你是沉浸式文字冒险RPG《深渊边境》的GM。你负责主持日式黑暗奇幻风格的冒险故事。
 
+【玩家角色】${buildPlayerPersona()}
 【当前位置】${locName} | 【时间】第${gameTime.day}天 ${gameTime.period} | 【时段特征】${gameTime.period==='night'?'深渊力量达到顶峰，妖兽活性增强':gameTime.period==='evening'?'雾气重新聚拢，危险正在逼近':gameTime.period==='morning'?'晨光初现，雾气渐薄':'午后是边境最安静的时刻'}
 ${worldBookCtx}${stylePrompt}
 【结构化输出格式】你必须严格按以下格式一次性回复：
@@ -904,8 +910,8 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
   return (
     <div className="app-container">
       <Sidebar screen={screen} setScreen={setScreen} invOpen={invOpen} setInvOpen={setInvOpen} setOpen={setSettingsOpen}
-        searchOpen={searchOpen} setSearchOpen={setSearchOpen} charOpen={charOpen} setCharOpen={setCharOpen}
-        diceOpen={diceOpen} setDiceOpen={setDiceOpen} npcCreatorOpen={npcCreatorOpen} setNpcCreatorOpen={setNpcCreatorOpen}
+        searchOpen={searchOpen} setSearchOpen={setSearchOpen} npcCreatorOpen={npcCreatorOpen} setNpcCreatorOpen={setNpcCreatorOpen}
+        profileOpen={profileOpen} setProfileOpen={setProfileOpen}
         quests={quests} onExport={handleExport} onImport={handleImport} />
       <div className="main-area">
         <Header player={player} gameTime={gameTime} setGameTime={setGameTime} hasApi={!!getConfig().apiKey} />
@@ -939,6 +945,7 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
         onCreate={(newChar)=>{setPlayer({...newChar,equipment:{weapon:null,armor:null,accessory:null},hp:newChar.maxHp,mp:newChar.maxMp});setInventory({...startingInventory});setStoryLog([{role:'narrator',content:`欢迎，${newChar.name}。你踏入了深渊边境的迷雾之中，一段全新的冒险即将开始。\n\n雾中隐约可见一个三岔路口。远处有一座旧神社的鸟居轮廓。你的故事，从此刻开始书写。`}]);setCurrentNodeId('crossroads');setScreen('story');}}
         toast={toast} />
       <SettingsModal open={settingsOpen} onClose={()=>setSettingsOpen(false)} toast={toast} />
+        <PlayerProfile open={profileOpen} onClose={()=>setProfileOpen(false)} toast={toast} />
         <Tutorial open={tutorialOpen} onClose={()=>{setTutorialOpen(false);localStorage.setItem('llmgame_tutorial_done','1');}} />
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
