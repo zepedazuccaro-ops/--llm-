@@ -7,6 +7,7 @@ import { mainStory, branches, talents, canTakeTalent } from './data/storyline.js
 import { initGameTime } from './systems/clock.js';
 import { createSave, exportSave, importSaveFile, validateSave } from './systems/save.js';
 import { skillCheck, narrativeEffect, rollD100, rollDice, calcSkillBase } from './systems/dice.js';
+import { buildWorldBookContext } from './data/worldbook.js';
 import ClockDisplay from './components/ClockDisplay.jsx';
 import DiceRoller from './components/DiceRoller.jsx';
 import NPCCreator from './components/NPCCreator.jsx';
@@ -409,8 +410,10 @@ function SearchPanel({ open, onClose, toast }) {
           {loading && <div className="search-loading"><div className="shimmer" style={{height:60,borderRadius:'var(--radius-md)'}}/></div>}
           {results && (
             <div className="search-results">
-              {results.map((r,i)=><div key={i} className="search-item glass-light">
-                <h4>{r.title}</h4><p>{r.snippet}</p>
+              {results.map((r,i)=><div key={i} className="search-item glass-light"
+                onClick={()=>{if(r.url)window.open(r.url,'_blank','noopener,noreferrer');}}
+                style={{cursor:r.url?'pointer':'default'}}>
+                <h4>{r.title}{r.url&&' ↗'}</h4><p>{r.snippet}</p>
               </div>)}
             </div>
           )}
@@ -533,7 +536,6 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
         <button className={`nav-btn ripple-container ${screen==='story'?'active':''}`} onClick={()=>setScreen('story')}><BookOpen size={18}/><span>故事</span></button>
         <button className={`nav-btn ripple-container ${screen==='map'?'active':''}`} onClick={()=>setScreen('map')}><Map size={18}/><span>地图</span></button>
         <button className={`nav-btn ripple-container ${invOpen?'active':''}`} onClick={()=>setInvOpen(true)}><Backpack size={18}/><span>背包</span></button>
-        <button className="nav-btn ripple-container" onClick={()=>setDiceOpen(true)}><Dices size={18}/><span>骰子</span></button>
         <button className="nav-btn ripple-container" onClick={()=>setSearchOpen(true)}><Globe size={18}/><span>搜索</span></button>
       </nav>
       <div className="sidebar-actions">
@@ -547,15 +549,16 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
       </div>
       <div className="sidebar-footer">
         <div className="style-quick">
-          <label className="setting-label" style={{fontSize:10}}>文风 (影响AI输出)</label>
-          <input className="setting-input" style={{fontSize:11,padding:'4px 8px'}} value={localStorage.getItem('llmgame_style')||''}
-            onChange={e=>{localStorage.setItem('llmgame_style',e.target.value);}}
+          <label className="setting-label" style={{fontSize:10}}>文风</label>
+          <input className="setting-input" style={{fontSize:11,padding:'4px 8px'}}
+            defaultValue={localStorage.getItem('llmgame_style')||''}
+            onBlur={e=>{localStorage.setItem('llmgame_style',e.target.value);}}
             placeholder="简洁冷峻, 每段2-4句, 200-400字"/>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-            <input type="checkbox" id="autoDice" checked={localStorage.getItem('llmgame_autodice')!=='false'}
-              onChange={e=>{localStorage.setItem('llmgame_autodice',e.target.checked);window.location.reload();}}/>
-            <label htmlFor="autoDice" style={{fontSize:10,color:'var(--text-dim)'}}>自动发送骰值</label>
-          </div>
+          <label style={{display:'flex',alignItems:'center',gap:4,marginTop:4,cursor:'pointer'}}>
+            <input type="checkbox" defaultChecked={localStorage.getItem('llmgame_autodice')!=='false'}
+              onChange={e=>localStorage.setItem('llmgame_autodice',e.target.checked)}/>
+            <span style={{fontSize:10,color:'var(--text-dim)'}}>自动骰值</span>
+          </label>
         </div>
         <button className="nav-btn ripple-container" onClick={()=>setOpen(true)}><Settings size={16}/><span>API设置</span></button>
       </div>
@@ -724,67 +727,64 @@ export default function App() {
     toast('success',trade.dialog||`交易成功！`);
   },[inventory,toast]);
 
-  // === SEND MESSAGE (with dice integration) ===
+  // === SEND MESSAGE (keyword-dice + worldbook + style) ===
   const handleSend = useCallback(async (input) => {
     setStoryLog(prev=>[...prev,{role:'player',content:input}]); setIsLoading(true); setApiError('');
     setQuickReplies(null);
 
-    // Auto dice check for actions
-    const diceResult = skillCheck(50);
-    const eff = narrativeEffect(diceResult, 'exploration');
-    const diceMsg = autoSendDice ? `[系统骰子检定: ${diceResult.roll} vs 50 → ${diceResult.level}] ${eff.text||''}\n` : '';
+    // Dice: ONLY on explicit trigger keywords
+    const diceKw=['探索','调查','战斗','攻击','潜行','偷','说服','恐吓','闪避','格斗','聆听','侦查','搜寻','跟踪','攀爬'];
+    const shouldRoll=diceKw.some(k=>input.includes(k));
+    const diceResult=shouldRoll?skillCheck(50):null;
+    const diceMsg=(diceResult&&autoSendDice)
+      ?`\n[骰子:${diceResult.roll} vs 50→${diceResult.level==='extreme'?'极难成功':diceResult.level==='hard'?'困难成功':diceResult.level}]`
+      :'';
 
-    // Build system prompt with writing style
-    const sysPrompt = writingStyle
-      ? `你是一个沉浸式文字冒险RPG的游戏主持人。${writingStyle}\n\n请以第二人称叙述，每次回复后在末尾提供3个行动选项，格式为[选项] 行动描述。`
-      : '你是一个沉浸式文字冒险RPG的游戏主持人。请以第二人称叙述，每次回复后在末尾提供3个行动选项，格式为[选项] 行动描述。';
+    // Build context: World Book + Writing Style
+    const currentNode=mapNodes.find(n=>n.id===currentNodeId);
+    const locName=currentNode?.name||'未知';
+    const worldBookCtx=buildWorldBookContext(input,currentNodeId,null,gameTime);
+    const style=localStorage.getItem('llmgame_style')||'';
+    const stylePrompt=style?`\n【文风要求】${style}\n`:'\n【文风要求】简洁冷峻的日系叙事，每段2-4句，注重光影/声音/气味描写，控制200-400字。\n';
+    const sysPrompt=`你是沉浸式文字冒险RPG《深渊边境》的GM。你负责主持日式黑暗奇幻风格的冒险故事。
+
+【当前位置】${locName} | 【时间】第${gameTime.day}天 ${gameTime.period} | 【时段特征】${gameTime.period==='night'?'深渊力量达到顶峰，妖兽活性增强':gameTime.period==='evening'?'雾气重新聚拢，危险正在逼近':gameTime.period==='morning'?'晨光初现，雾气渐薄':'午后是边境最安静的时刻'}
+${worldBookCtx}${stylePrompt}
+【规则】
+1. 以第二人称「你」叙述，营造沉浸氛围
+2. 根据当前位置、时间、NPC和世界设定自主推导剧情，拒绝预设模板回答
+3. 结尾提供3个符合当前情境的行动选项，格式:[选项] 行动描述
+4. 涉及战斗/探索/社交判定时，参考骰子结果调整叙述
+${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
 
     try {
       const cfg = getConfig();
       if (cfg.apiKey && apiEnabled) {
-        const resp = await sendGameMessage({storyLog:[...storyLog,{role:'player',content:input}],playerInput:input,
-          systemPrompt: sysPrompt});
-        // Generate quick reply options from [选项] tags
+        const resp = await sendGameMessage({storyLog:[...storyLog,{role:'player',content:input}],playerInput:input,systemPrompt:sysPrompt});
         const optionMatch = resp.match(/\[选项\](.*?)(?=\[选项\]|$)/gs)||[];
         const options = optionMatch.map(o=>o.replace('[选项]','').trim()).filter(Boolean);
-        const finalOptions = options.length>=2? options.slice(0,4) :
-          ['继续向前探索','仔细观察周围环境','与附近的人交谈'];
-        setQuickReplies(finalOptions);
-        const lastEntry = {role:'narrator',content:resp,
-          diceResult:diceResult.level!=='regular'?{...diceResult,label:'探索检定'}:null};
-        setStoryLog(prev=>[...prev,lastEntry]);
+        setQuickReplies(options.length>=2?options.slice(0,4):['继续向前探索','仔细观察周围环境','与附近的人交谈']);
+        setStoryLog(prev=>[...prev,{role:'narrator',content:resp,diceResult:diceResult&&diceResult.level!=='regular'?{...diceResult,label:'行动检定'}:null}]);
       } else {
-        await new Promise(r=>setTimeout(r,600+Math.random()*1000));
-        const actions = ['探索','观察','调查','搜索','潜行','聆听'];
-        const targetSkill = actions[Math.floor(Math.random()*actions.length)];
-        const check = skillCheck(45+Math.floor(Math.random()*20));
-        const effect = narrativeEffect(check, 'exploration');
-
-        const mockPrefix = diceResult.level!=='regular'
-          ? `[骰子·${targetSkill}检定 → ${check.roll} vs ${check.skill} — ${check.level==='extreme'?'极难成功':check.level==='hard'?'困难成功':check.level}]\n${effect.text} ${effect.bonus||''}\n\n`
-          : '';
-
-        const mocks = [
-          mockPrefix+'你沿着小径继续前行。雾气似乎更浓了，在脚踝的高度翻滚涌动。远处的树影在雾中若隐若现。\n\n一阵凉风拂过，带来了远处隐约的金属碰撞声——是矿坑的方向。也可能是别的什么。',
-          mockPrefix+'脚下碎石在寂静中发出清脆响声。路边的石碑上刻着模糊不清的文字。弯下腰，你用手指拂去碑面泥土。「……者，勿……前……」——一块警示碑。',
-          mockPrefix+'你停下脚步，侧耳倾听。风中传来远处的瀑布声和近处树叶的沙沙声。空气中有淡淡的铁锈味——从矿坑方向飘来。',
+        await new Promise(r=>setTimeout(r,500+Math.random()*800));
+        const check=skillCheck(45+Math.floor(Math.random()*20));
+        const eff=narrativeEffect(check,'exploration');
+        const diceDisplay=shouldRoll?`\n[骰子·${['侦查','聆听','调查','探索'][Math.floor(Math.random()*4)]}检定→${check.roll}vs${check.skill}—${check.level==='extreme'?'极难成功':check.level==='hard'?'困难成功':check.level}]\n`:'';
+        const mockScenes=[
+          diceDisplay+'你沿着小径继续前行。雾气在脚踝高度翻滚涌动。远处树影在雾中若隐若现。一阵凉风带来了隐约的金属碰撞声——矿坑方向。也可能是别的什么。',
+          diceDisplay+'脚下碎石在寂静中发出脆响。路边石碑上刻着模糊的旧文字。弯下腰拂去碑面泥土——「…者，勿…前…」是块警示碑。雾气似乎比刚才更浓了。',
+          diceDisplay+'你停下脚步，侧耳倾听。风中传来远处瀑布的轰鸣和近处树叶的沙沙声。空气中有淡淡的铁锈味——从矿坑方向飘来，与神社的檀香味形成诡异的对比。',
         ];
-        const content = mocks[Math.floor(Math.random()*mocks.length)];
-        const finalOptions = ['朝矿坑方向前进','在附近搜索隐藏路径','停下来观察周围痕迹'];
-        setQuickReplies(finalOptions);
-        const lastEntry = {role:'narrator',content,
-          diceResult:{...check,label:`${targetSkill}检定`}};
-        setStoryLog(prev=>[...prev,lastEntry]);
-        if (Math.random()<0.2) { const m=monsters[Math.floor(Math.random()*monsters.length)];
-          setCombat({active:true,monster:{...m,hp:m.maxHp},playerState:{...player,hp:player.hp,mp:player.mp}}); toast('warning',`遭遇了 ${m.name}！`); }
+        setStoryLog(prev=>[...prev,{role:'narrator',content:mockScenes[Math.floor(Math.random()*mockScenes.length)],diceResult:shouldRoll?{...check,label:'探索检定'}:null}]);
+        setQuickReplies(['朝矿坑方向前进','在附近搜索隐藏路径','停下来观察周围痕迹']);
+        if(Math.random()<0.2){const m=monsters[Math.floor(Math.random()*monsters.length)];setCombat({active:true,monster:{...m,hp:m.maxHp},playerState:{...player,hp:player.hp,mp:player.mp}});toast('warning',`遭遇了${m.name}！`);}
       }
     } catch(e) {
       setApiError(e.message);
-      toast('danger',`API调用失败，已切换至Mock模式`);
+      toast('danger','API调用失败，已切换至Mock模式');
       setApiEnabled(false);
-    }
-    finally { setIsLoading(false); }
-  },[storyLog,player,toast,apiEnabled]);
+    } finally { setIsLoading(false); }
+  },[storyLog,player,toast,apiEnabled,currentNodeId,gameTime,autoSendDice]);
 
   // === MAP ===
   const handleTravel = useCallback((node) => {
