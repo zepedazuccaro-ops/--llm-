@@ -478,6 +478,12 @@
 .sidebar-actions .nav-btn { font-size:12px; }
 .sidebar-actions .nav-btn span { font-size:12px; }
 
+/* ==================== VARIABLE PANEL ==================== */
+.vars-panel { font-size:11px; }
+.var-group { padding:3px 0;border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;margin-bottom:2px; }
+.var-label { color:var(--text-dim);font-size:10px; }
+.var-row { display:flex;justify-content:space-between;padding:1px 8px;color:var(--text-secondary);font-family:var(--font-mono);font-size:10px; }
+
 /* ==================== NPC CREATOR ==================== */
 .npc-templates { display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:var(--space-sm) 0; }
 .tpl-btn { padding:10px;border-radius:var(--radius-md);border:1px solid var(--border-default);cursor:pointer;font-family:var(--font-sans);text-align:left;transition:all var(--duration-fast);display:flex;flex-direction:column; }

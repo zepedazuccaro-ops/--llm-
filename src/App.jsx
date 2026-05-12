@@ -7,7 +7,7 @@ import { mainStory, branches, talents, canTakeTalent } from './data/storyline.js
 import { initGameTime } from './systems/clock.js';
 import { createSave, exportSave, importSaveFile, validateSave } from './systems/save.js';
 import { skillCheck, narrativeEffect, rollD100, rollDice, calcSkillBase } from './systems/dice.js';
-import { buildWorldBookContext } from './data/worldbook.js';
+import { buildWorldBookContext, worldBook } from './data/worldbook.js';
 import ClockDisplay from './components/ClockDisplay.jsx';
 import DiceRoller from './components/DiceRoller.jsx';
 import NPCCreator from './components/NPCCreator.jsx';
@@ -609,6 +609,8 @@ function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, 
         <button className="nav-btn ripple-container" onClick={onExport}><Download size={16}/><span>导出存档</span></button>
         <button className="nav-btn ripple-container" onClick={onImport}><Upload size={16}/><span>导入存档</span></button>
         <button className="nav-btn ripple-container" onClick={()=>setNpcCreatorOpen(true)}><Users size={16}/><span>创建NPC</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setWorldBookOpen(true)}><BookOpen size={16}/><span>世界书</span></button>
+        <button className="nav-btn ripple-container" onClick={()=>setShowVars(!showVars)}><Eye size={16}/><span>{showVars?'隐藏变量':'变量'}</span></button>
         <button className="nav-btn ripple-container" onClick={()=>setProfileOpen(true)}><User size={16}/><span>人设</span></button>
       </div>
       <div className="sidebar-quests"><div className="quests-title">任务</div>
@@ -661,6 +663,76 @@ function Header({ player, gameTime, setGameTime, hasApi }) {
   );
 }
 
+// === VARIABLE PANEL ===
+function VariablePanel({ player, inventory, currentNodeId, gameTime, storyLog, onClose }) {
+  const node = mapNodes.find(n=>n.id===currentNodeId);
+  return (
+    <div className="vars-panel glass" style={{position:'fixed',right:8,top:60,bottom:8,width:260,zIndex:1000,overflowY:'auto',padding:12,borderRadius:'var(--radius-lg)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+        <h4 style={{fontSize:13}}>变量监视器</h4><button className="btn-close" onClick={onClose}><X size={14}/></button>
+      </div>
+      <div className="var-group"><span className="var-label">玩家</span><span>{player.name} Lv.{player.level}</span></div>
+      <div className="var-group"><span className="var-label">HP/MP</span><span>{player.hp}/{player.maxHp} | {player.mp}/{player.maxMp}</span></div>
+      <div className="var-group"><span className="var-label">位置</span><span>{node?.name||'?'}</span></div>
+      <div className="var-group"><span className="var-label">时间</span><span>第{gameTime.day}天 {gameTime.period}</span></div>
+      <div className="var-group"><span className="var-label">道具数</span><span>{Object.keys(inventory).length}种</span></div>
+      <div className="var-group"><span className="var-label">对话数</span><span>{storyLog.length}条</span></div>
+      <div className="var-group"><span className="var-label">装备</span><span>{player.equipment.weapon?.name||'无'} / {player.equipment.armor?.name||'无'}</span></div>
+      <div className="var-group"><span className="var-label">属性</span></div>
+      {player.attributes&&Object.entries(player.attributes).map(([k,v])=><div key={k} className="var-row"><span>{k}</span><span>{v}</span></div>)}
+    </div>
+  );
+}
+
+// === WORLD BOOK EDITOR ===
+function WorldBookEditor({ open, onClose, toast }) {
+  if (!open) return null;
+  const [entries, setEntries] = useState(()=>{
+    const s=localStorage.getItem('llmgame_worldbook');
+    return s?JSON.parse(s):worldBook.entries;
+  });
+  const [editIdx, setEditIdx] = useState(-1);
+  const [newEntry, setNewEntry] = useState({keys:'',title:'',content:'',category:'world'});
+
+  const save = () => {
+    localStorage.setItem('llmgame_worldbook',JSON.stringify(entries));
+    toast('success','世界书已保存');
+  };
+  const add = () => {
+    if(!newEntry.title.trim())return;
+    setEntries([...entries,{...newEntry,keys:newEntry.keys.split(',')}]);
+    setNewEntry({keys:'',title:'',content:'',category:'world'});
+    toast('info','条目已添加');
+  };
+  const remove = (i) => {setEntries(entries.filter((_,j)=>j!==i));};
+
+  return (
+    <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div className="settings-modal glass modal-content" style={{width:600,maxHeight:'85vh',overflowY:'auto'}}>
+        <div className="drawer-header"><h3><BookOpen size={18}/>世界书编辑器</h3><button className="btn-close" onClick={onClose}><X size={16}/></button></div>
+        <div className="settings-body">
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:8}}>
+            <input className="setting-input" placeholder="条目名称" value={newEntry.title} onChange={e=>setNewEntry({...newEntry,title:e.target.value})}/>
+            <select className="setting-input" value={newEntry.category} onChange={e=>setNewEntry({...newEntry,category:e.target.value})}>
+              <option value="world">世界观</option><option value="faction">势力</option><option value="location">地点</option><option value="character">角色</option><option value="bestiary">怪物</option><option value="item">物品</option><option value="rules">规则</option>
+            </select>
+          </div>
+          <input className="setting-input" placeholder="触发关键词(逗号分隔)" value={newEntry.keys} onChange={e=>setNewEntry({...newEntry,keys:e.target.value})}/>
+          <textarea className="setting-input" placeholder="条目内容" value={newEntry.content} onChange={e=>setNewEntry({...newEntry,content:e.target.value})} style={{minHeight:60}}/>
+          <button className="btn-trade ripple-container" onClick={add} style={{marginBottom:8}}>添加条目</button>
+          <div style={{maxHeight:300,overflowY:'auto'}}>
+            {entries.map((e,i)=><div key={i} className="trade-item glass-light" style={{marginBottom:4}}>
+              <div style={{flex:1}}><strong style={{fontSize:12}}>{e.title}</strong><span style={{fontSize:10,color:'var(--text-dim)',marginLeft:8}}>{e.category}</span></div>
+              <button className="api-copy-btn" onClick={()=>remove(i)} style={{fontSize:10}}>删除</button>
+            </div>)}
+          </div>
+          <button className="btn-save ripple-container" onClick={save} style={{marginTop:8}}>保存世界书</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ==================== MAIN APP ====================
 export default function App() {
   const [screen, setScreen] = useState('story');
@@ -694,6 +766,10 @@ export default function App() {
   const [npcChatLog, setNpcChatLog] = useState([]);
   const [npcChatInput, setNpcChatInput] = useState('');
   const [profileOpen, setProfileOpen] = useState(false);
+  const [streamMode, setStreamMode] = useState(()=>localStorage.getItem('llmgame_stream')!=='false');
+  const [showThinking, setShowThinking] = useState(true);
+  const [showVars, setShowVars] = useState(false);
+  const [worldBookOpen, setWorldBookOpen] = useState(false);
   const [writingStyle, setWritingStyle] = useState(()=>localStorage.getItem('llmgame_style')||'');
   const [autoSendDice, setAutoSendDice] = useState(()=>localStorage.getItem('llmgame_autodice')!=='false');
   const [player, setPlayer] = useState(()=>{
@@ -809,9 +885,12 @@ export default function App() {
     const diceKw=['探索','调查','战斗','攻击','潜行','偷','说服','恐吓','闪避','格斗','聆听','侦查','搜寻','跟踪','攀爬'];
     const shouldRoll=diceKw.some(k=>input.includes(k));
     const diceResult=shouldRoll?skillCheck(50):null;
+    const actType=diceKw.some(k=>input.includes(k))?'exploration':'social';
+    const diceResult=shouldRoll?skillCheck(50):null;
     const diceMsg=(diceResult&&autoSendDice)
       ?`\n[骰子:${diceResult.roll} vs 50→${diceResult.level==='extreme'?'极难成功':diceResult.level==='hard'?'困难成功':diceResult.level}]`
       :'';
+    const autoDice=localStorage.getItem('llmgame_autodice')!=='false';
 
     // Build context: World Book + Writing Style
     const currentNode=mapNodes.find(n=>n.id===currentNodeId);
@@ -978,6 +1057,8 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
       <CharacterCreation open={charOpen} onClose={()=>setCharOpen(false)}
         onCreate={(newChar)=>{setPlayer({...newChar,equipment:{weapon:null,armor:null,accessory:null},hp:newChar.maxHp,mp:newChar.maxMp});setInventory({...startingInventory});setStoryLog([{role:'narrator',content:`欢迎，${newChar.name}。你踏入了深渊边境的迷雾之中，一段全新的冒险即将开始。\n\n雾中隐约可见一个三岔路口。远处有一座旧神社的鸟居轮廓。你的故事，从此刻开始书写。`}]);setCurrentNodeId('crossroads');setScreen('story');}}
         toast={toast} />
+      {showVars && <VariablePanel player={player} inventory={inventory} currentNodeId={currentNodeId} gameTime={gameTime} storyLog={storyLog} onClose={()=>setShowVars(false)} />}
+      {worldBookOpen && <WorldBookEditor open={worldBookOpen} onClose={()=>setWorldBookOpen(false)} toast={toast} />}
       <SettingsModal open={settingsOpen} onClose={()=>setSettingsOpen(false)} toast={toast} />
         <PlayerProfile open={profileOpen} onClose={()=>setProfileOpen(false)} toast={toast} />
         <Tutorial open={tutorialOpen} onClose={()=>{setTutorialOpen(false);localStorage.setItem('llmgame_tutorial_done','1');}} />
