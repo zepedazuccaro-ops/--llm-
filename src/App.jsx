@@ -2,10 +2,11 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Menu, Swords, Map, BookOpen, Backpack, Settings, Send, X, Heart, Zap, Star, Crosshair, Shield, Swords as Atk, Footprints, Sparkles, FlaskRound, Droplets, Key, Diamond, UtensilsCrossed, Gem, Flame, Skull, Bug, CloudFog, Wind, Snowflake, Sword, Package, Circle, MapPin, User, Heart as HeartIcon, Trash2, Wrench, Plus, Search, Globe, Eye, UserPlus, RefreshCw, Download, Upload, Dices, Users, Clock } from 'lucide-react';
 import './App.css';
 import { playerData, itemDatabase, startingInventory, mapNodes, npcs, monsters, playerSkills, sampleStoryLog, quests, sceneStories } from './data/mock.js';
-import { sendGameMessage, getConfig, updateConfig, loadConfig } from './api/llm.js';
+import { sendGameMessage, getConfig, updateConfig, loadConfig, selectProvider, setApiKey, PROVIDERS } from './api/llm.js';
 import { mainStory, branches, talents, canTakeTalent } from './data/storyline.js';
 import { initGameTime } from './systems/clock.js';
 import { createSave, exportSave, importSaveFile, validateSave } from './systems/save.js';
+import { skillCheck, narrativeEffect, rollD100, rollDice, calcSkillBase } from './systems/dice.js';
 import ClockDisplay from './components/ClockDisplay.jsx';
 import DiceRoller from './components/DiceRoller.jsx';
 import NPCCreator from './components/NPCCreator.jsx';
@@ -56,8 +57,8 @@ function ToastContainer({ toasts, removeToast }) {
   );
 }
 
-// === STORY PANEL ===
-function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading }) {
+// === STORY PANEL (with quick replies + dice display) ===
+function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading, quickReplies, onQuickReply }) {
   const endRef = useRef(null), ripple = useRipple();
   useEffect(() => { endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [storyLog]);
 
@@ -69,14 +70,28 @@ function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading }
         {storyLog.map((e,i) => (
           <div key={i} className={`story-entry ${e.role}`} style={{animation:`fadeInUp var(--duration-normal) var(--ease-out-expo) forwards`,animationDelay:`${i*25}ms`,opacity:0}}>
             <div className={`entry-wrap ${e.role}`}>
-              <div className="entry-label">{e.role==='narrator'?'GM':'你'}</div>
-              <div className="entry-content">{e.content.split('\n').map((l,j)=><p key={j}>{l||' '}</p>)}</div>
+              <div className="entry-label">{e.role==='narrator'?'GM':e.role==='system'?'系统':'你'}</div>
+              <div className="entry-content">
+                {e.content.split('\n').map((l,j)=><p key={j}>{l||' '}</p>)}
+                {e.diceResult && (
+                  <div className={`dice-inline ${e.diceResult.level}`}>
+                    <span className="dice-inline-label">🎲 {e.diceResult.label}:</span>
+                    <span className="dice-inline-value">{e.diceResult.roll} vs {e.diceResult.skill}</span>
+                    <span className={`dice-inline-level ${e.diceResult.level}`}>{e.diceResult.level==='extreme'?'极难成功':e.diceResult.level==='hard'?'困难成功':e.diceResult.level==='regular'?'成功':e.diceResult.level==='fumble'?'大失败':'失败'}</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ))}
         {isLoading && <div className="story-entry narrator"><div className="entry-wrap narrator"><div className="entry-label">GM</div><div className="entry-content"><span className="typewriter-cursor">思考中</span></div></div></div>}
         <div ref={endRef} />
       </div>
+      {quickReplies && quickReplies.length>0 && !isLoading && (
+        <div className="quick-replies">
+          {quickReplies.map((qr,i)=><button key={i} className="quick-reply-btn glass-light ripple-container" onClick={e=>{ripple(e);onQuickReply(qr);}}>{qr}</button>)}
+        </div>
+      )}
       <div className="story-input-area glass-light">
         <input id="player-input" className="player-input" value={playerInput} onChange={e=>setPlayerInput(e.target.value)}
           onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}}
@@ -461,18 +476,37 @@ function CharacterCreation({ open, onClose, onCreate, toast }) {
 function SettingsModal({ open, onClose, toast }) {
   if (!open) return null;
   const cfg = getConfig();
-  const [ep, setEp] = useState(cfg.endpoint), [key, setKey] = useState(cfg.apiKey), [mdl, setMdl] = useState(cfg.model), ripple = useRipple();
+  const [provider, setProvider] = useState(localStorage.getItem('llmgame_provider')||'deepseek');
+  const [ep, setEp] = useState(cfg.baseURL);
+  const [key, setKey] = useState(cfg.apiKey);
+  const [mdl, setMdl] = useState(cfg.model);
+  const ripple = useRipple();
+
+  const switchProvider = (pkey) => {
+    const c = selectProvider(pkey);
+    setProvider(pkey); setEp(c.baseURL); setMdl(c.model);
+  };
 
   return (
     <div className="modal-overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
-      <div className="settings-modal glass modal-content" style={{maxWidth:460}}>
-        <div className="drawer-header"><h3><Settings size={18}/>LLM API 设置</h3><button className="btn-close" onClick={onClose}><X size={16}/></button></div>
+      <div className="settings-modal glass modal-content" style={{maxWidth:500}}>
+        <div className="drawer-header"><h3><Settings size={18}/>API 设置 (酒馆式多提供商)</h3><button className="btn-close" onClick={onClose}><X size={16}/></button></div>
         <div className="settings-body">
+          <label className="setting-label">提供商预设</label>
+          <div className="provider-select">
+            {Object.entries(PROVIDERS).map(([k,v])=>(
+              <button key={k} className={`provider-btn ${provider===k?'active':''} ripple-container`}
+                onClick={()=>switchProvider(k)}>{v.name}</button>
+            ))}
+          </div>
           <label className="setting-label">API 端点</label><input className="setting-input" value={ep} onChange={e=>setEp(e.target.value)}/>
           <label className="setting-label">API Key</label><input className="setting-input" type="password" value={key} onChange={e=>setKey(e.target.value)}/>
           <label className="setting-label">模型</label><input className="setting-input" value={mdl} onChange={e=>setMdl(e.target.value)}/>
-          <button className="btn-save ripple-container" onClick={e=>{ripple(e);updateConfig({endpoint:ep,apiKey:key,model:mdl});toast('success','设置已保存');onClose();}}>保存配置</button>
-          <p className="settings-hint">默认 DeepSeek API。也可使用 OpenAI-compatible 端点。API Key 仅存储于浏览器本地。</p>
+          <button className="btn-save ripple-container" onClick={e=>{ripple(e);updateConfig({baseURL:ep,apiKey:key,model:mdl});setApiKey(key);toast('success','设置已保存');onClose();}}>保存配置</button>
+          <div className="settings-recommend">
+            <strong>推荐设置 (DeepSeek):</strong>
+            <p>端点: https://api.deepseek.com/anthropic<br/>模型: deepseek-v4-pro[1m]<br/>API Key: 从 platform.deepseek.com 获取</p>
+          </div>
         </div>
       </div>
     </div>
@@ -556,9 +590,10 @@ export default function App() {
   const [playerTalents, setPlayerTalents] = useState(()=>{
     const s = localStorage.getItem('llmgame_talents'); return s?JSON.parse(s):[];
   });
-  const [tutorialOpen, setTutorialOpen] = useState(()=>{
-    return !localStorage.getItem('llmgame_tutorial_done');
-  });
+  const [tutorialOpen, setTutorialOpen] = useState(()=>!localStorage.getItem('llmgame_tutorial_done'));
+  const [quickReplies, setQuickReplies] = useState(null);
+  const [apiError, setApiError] = useState('');
+  const [apiEnabled, setApiEnabled] = useState(!!getConfig().apiKey);
   const [player, setPlayer] = useState(()=>{
     const saved = localStorage.getItem('llmgame_player');
     if (saved) try {return JSON.parse(saved);} catch(e){}
@@ -663,27 +698,61 @@ export default function App() {
     toast('success',trade.dialog||`交易成功！`);
   },[inventory,toast]);
 
-  // === SEND MESSAGE ===
+  // === SEND MESSAGE (with dice integration) ===
   const handleSend = useCallback(async (input) => {
-    setStoryLog(prev=>[...prev,{role:'player',content:input}]); setIsLoading(true);
+    setStoryLog(prev=>[...prev,{role:'player',content:input}]); setIsLoading(true); setApiError('');
+    setQuickReplies(null);
+
+    // Auto dice check for actions
+    const diceResult = skillCheck(50); // Default 50% base
+    const eff = narrativeEffect(diceResult, 'exploration');
+    const diceMsg = diceResult.level!=='regular' ? `[骰子: ${diceResult.roll} vs 50 → ${diceResult.level==='extreme'?'极难成功':diceResult.level==='hard'?'困难成功':diceResult.level}]\n` : '';
+
     try {
       const cfg = getConfig();
-      if (cfg.apiKey) {
+      if (cfg.apiKey && apiEnabled) {
         const resp = await sendGameMessage({storyLog:[...storyLog,{role:'player',content:input}],playerInput:input});
-        setStoryLog(prev=>[...prev,{role:'narrator',content:resp}]);
+        // Generate quick reply options from [选项] tags
+        const optionMatch = resp.match(/\[选项\](.*?)(?=\[选项\]|$)/gs)||[];
+        const options = optionMatch.map(o=>o.replace('[选项]','').trim()).filter(Boolean);
+        const finalOptions = options.length>=2? options.slice(0,4) :
+          ['继续向前探索','仔细观察周围环境','与附近的人交谈'];
+        setQuickReplies(finalOptions);
+        const lastEntry = {role:'narrator',content:resp,
+          diceResult:diceResult.level!=='regular'?{...diceResult,label:'探索检定'}:null};
+        setStoryLog(prev=>[...prev,lastEntry]);
       } else {
         await new Promise(r=>setTimeout(r,600+Math.random()*1000));
+        const actions = ['探索','观察','调查','搜索','潜行','聆听'];
+        const targetSkill = actions[Math.floor(Math.random()*actions.length)];
+        const check = skillCheck(45+Math.floor(Math.random()*20));
+        const effect = narrativeEffect(check, 'exploration');
+
+        const mockPrefix = diceResult.level!=='regular'
+          ? `[骰子·${targetSkill}检定 → ${check.roll} vs ${check.skill} — ${check.level==='extreme'?'极难成功':check.level==='hard'?'困难成功':check.level}]\n${effect.text} ${effect.bonus||''}\n\n`
+          : '';
+
         const mocks = [
-          '你沿着小径继续前行。雾气似乎更浓了，在脚踝的高度翻滚涌动。远处的树影在雾中若隐若现。\n\n一阵凉风拂过，带来了远处隐约的金属碰撞声——是矿坑的方向。也可能是别的什么。\n\n[选项] 朝矿坑方向前进\n[选项] 在附近搜索隐藏的路径\n[选项] 停下来仔细观察周围的痕迹',
-          '脚下的碎石在寂静中发出清脆的响声。路边的石碑上刻着已经模糊不清的文字。\n\n弯下腰，你用手指轻轻拂去碑面的泥土。隐约可以辨认出几个字：「……者，勿……前……」——这是一块警示碑。\n\n[选项] 继续无视警告向前\n[选项] 仔细拓印石碑内容\n[选项] 绕路从旁边的树林穿过',
+          mockPrefix+'你沿着小径继续前行。雾气似乎更浓了，在脚踝的高度翻滚涌动。远处的树影在雾中若隐若现。\n\n一阵凉风拂过，带来了远处隐约的金属碰撞声——是矿坑的方向。也可能是别的什么。',
+          mockPrefix+'脚下碎石在寂静中发出清脆响声。路边的石碑上刻着模糊不清的文字。弯下腰，你用手指拂去碑面泥土。「……者，勿……前……」——一块警示碑。',
+          mockPrefix+'你停下脚步，侧耳倾听。风中传来远处的瀑布声和近处树叶的沙沙声。空气中有淡淡的铁锈味——从矿坑方向飘来。',
         ];
-        setStoryLog(prev=>[...prev,{role:'narrator',content:mocks[Math.floor(Math.random()*mocks.length)]}]);
-        if (Math.random()<0.25) { const m=monsters[Math.floor(Math.random()*monsters.length)];
+        const content = mocks[Math.floor(Math.random()*mocks.length)];
+        const finalOptions = ['朝矿坑方向前进','在附近搜索隐藏路径','停下来观察周围痕迹'];
+        setQuickReplies(finalOptions);
+        const lastEntry = {role:'narrator',content,
+          diceResult:{...check,label:`${targetSkill}检定`}};
+        setStoryLog(prev=>[...prev,lastEntry]);
+        if (Math.random()<0.2) { const m=monsters[Math.floor(Math.random()*monsters.length)];
           setCombat({active:true,monster:{...m,hp:m.maxHp},playerState:{...player,hp:player.hp,mp:player.mp}}); toast('warning',`遭遇了 ${m.name}！`); }
       }
-    } catch(e) { toast('danger',`${e.message}`); }
+    } catch(e) {
+      setApiError(e.message);
+      toast('danger',`API调用失败，已切换至Mock模式`);
+      setApiEnabled(false);
+    }
     finally { setIsLoading(false); }
-  },[storyLog,player,toast]);
+  },[storyLog,player,toast,apiEnabled]);
 
   // === MAP ===
   const handleTravel = useCallback((node) => {
@@ -729,7 +798,15 @@ export default function App() {
         <Header player={player} gameTime={gameTime} setGameTime={setGameTime} hasApi={!!getConfig().apiKey} />
         <main className="content">
           {screen==='story'&&<StoryPanel storyLog={storyLog} playerInput={playerInput} setPlayerInput={setPlayerInput}
-            onSend={handleSend} isLoading={isLoading} />}
+            onSend={handleSend} isLoading={isLoading} quickReplies={quickReplies}
+            onQuickReply={(qr)=>{setQuickReplies(null);handleSend(qr);}} />}
+          {apiError && (
+            <div className="api-error-banner">
+              <span>API Error: {apiError.slice(0,150)}</span>
+              <button className="api-copy-btn" onClick={()=>{navigator.clipboard.writeText(apiError);toast('info','错误信息已复制到剪贴板');}}>复制错误</button>
+              <button className="api-copy-btn" onClick={()=>{setApiError('');setApiEnabled(true);}}>重试</button>
+            </div>
+          )}
           {screen==='map'&&<MapPanel nodes={mapNodes} currentNodeId={currentNodeId} onTravel={handleTravel}
             onNpcInteract={(id)=>setNpcDialog(allNpcs[id])} npcsHere={allNpcs} />}
         </main>
