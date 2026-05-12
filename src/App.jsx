@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Menu, Swords, Map, BookOpen, Backpack, Settings, Send, X, Heart, Zap, Star, Crosshair, Shield, Swords as Atk, Footprints, Sparkles, FlaskRound, Droplets, Key, Diamond, UtensilsCrossed, Gem, Flame, Skull, Bug, CloudFog, Wind, Snowflake, Sword, Package, Circle, MapPin, User, Heart as HeartIcon, Trash2, Wrench, Plus, Search, Globe, Eye, UserPlus, RefreshCw, Download, Upload, Dices, Users, Clock } from 'lucide-react';
 import './App.css';
 import { playerData, itemDatabase, startingInventory, mapNodes, npcs, monsters, playerSkills, sampleStoryLog, quests, sceneStories } from './data/mock.js';
@@ -60,7 +60,7 @@ function ToastContainer({ toasts, removeToast }) {
 }
 
 // === STORY PANEL (with quick replies + dice display) ===
-function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading, quickReplies, onQuickReply }) {
+const StoryPanel = React.memo(function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading, quickReplies, onQuickReply }) {
   const endRef = useRef(null), ripple = useRipple();
   useEffect(() => { endRef.current?.scrollIntoView({ behavior:'smooth' }); }, [storyLog]);
 
@@ -102,10 +102,10 @@ function StoryPanel({ storyLog, playerInput, setPlayerInput, onSend, isLoading, 
       </div>
     </div>
   );
-}
+});
 
 // === MAP PANEL ===
-function MapPanel({ nodes, currentNodeId, onTravel, onNpcInteract, npcsHere }) {
+const MapPanel = React.memo(function MapPanel({ nodes, currentNodeId, onTravel, onNpcInteract, npcsHere }) {
   const [selected, setSelected] = useState(null), ripple = useRipple();
   const current = nodes.find(n=>n.id===currentNodeId);
 
@@ -155,7 +155,7 @@ function MapPanel({ nodes, currentNodeId, onTravel, onNpcInteract, npcsHere }) {
       </div>
     </div>
   );
-}
+});
 
 // === COMBAT MODAL ===
 function CombatModal({ combat, onAction, onFlee }) {
@@ -595,7 +595,7 @@ function SettingsModal({ open, onClose, toast }) {
 }
 
 // === SIDEBAR ===
-function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, npcCreatorOpen, setNpcCreatorOpen, profileOpen, setProfileOpen, quests, onExport, onImport }) {
+function Sidebar({ screen, setScreen, invOpen, setInvOpen, setOpen, searchOpen, setSearchOpen, npcCreatorOpen, setNpcCreatorOpen, profileOpen, setProfileOpen, setWorldBookOpen, showVars, setShowVars, quests, onExport, onImport }) {
   return (
     <aside className="sidebar glass">
       <div className="sidebar-logo"><BookOpen size={20}/><span className="logo-text">深渊手札</span></div>
@@ -734,6 +734,22 @@ function WorldBookEditor({ open, onClose, toast }) {
 }
 
 // ==================== MAIN APP ====================
+// === ERROR BOUNDARY ===
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state={hasError:false,error:''}; }
+  static getDerivedStateFromError(error) { return {hasError:true,error:error.message}; }
+  render() {
+    if (this.state.hasError) return (
+      <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'var(--bg-deep)',color:'var(--text-primary)',flexDirection:'column',gap:16}}>
+        <h2>应用崩溃</h2><p style={{color:'var(--danger)'}}>{this.state.error}</p>
+        <button onClick={()=>{this.setState({hasError:false});window.location.reload();}}
+          style={{padding:'8px 20px',borderRadius:'var(--radius-md)',border:'1px solid var(--accent)',background:'rgba(112,148,186,0.1)',color:'var(--accent)',cursor:'pointer'}}>重新加载</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 export default function App() {
   const [screen, setScreen] = useState('story');
   const [storyLog, setStoryLog] = useState(sampleStoryLog);
@@ -1023,10 +1039,11 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
   },[npcChatLog,currentNodeId,gameTime,apiEnabled,toast]);
 
   return (
-    <div className="app-container">
+    <ErrorBoundary><div className="app-container">
       <Sidebar screen={screen} setScreen={setScreen} invOpen={invOpen} setInvOpen={setInvOpen} setOpen={setSettingsOpen}
         searchOpen={searchOpen} setSearchOpen={setSearchOpen} npcCreatorOpen={npcCreatorOpen} setNpcCreatorOpen={setNpcCreatorOpen}
-        profileOpen={profileOpen} setProfileOpen={setProfileOpen}
+        profileOpen={profileOpen} setProfileOpen={setProfileOpen} setWorldBookOpen={setWorldBookOpen}
+        showVars={showVars} setShowVars={setShowVars}
         quests={quests} onExport={handleExport} onImport={handleImport} />
       <div className="main-area">
         <Header player={player} gameTime={gameTime} setGameTime={setGameTime} hasApi={!!getConfig().apiKey} />
@@ -1065,6 +1082,6 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
         <PlayerProfile open={profileOpen} onClose={()=>setProfileOpen(false)} toast={toast} />
         <Tutorial open={tutorialOpen} onClose={()=>{setTutorialOpen(false);localStorage.setItem('llmgame_tutorial_done','1');}} />
       <ToastContainer toasts={toasts} removeToast={removeToast} />
-    </div>
+    </div></ErrorBoundary>
   );
 }
