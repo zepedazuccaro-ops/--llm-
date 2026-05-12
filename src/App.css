@@ -546,6 +546,10 @@ select.setting-input { appearance:none;background-image:url("data:image/svg+xml,
 .provider-btn.active { border-color:var(--accent);background:rgba(112,148,186,0.08);color:var(--accent); }
 
 /* === SETTINGS RECOMMEND === */
+.api-test-result { margin-top:8px;padding:8px 12px;border-radius:var(--radius-md);font-size:12px;font-family:var(--font-mono);line-height:1.6;word-break:break-all; }
+.api-test-result.success { background:rgba(107,139,107,0.08);color:var(--success);border:1px solid rgba(107,139,107,0.2); }
+.api-test-result.fail { background:rgba(160,88,88,0.08);color:var(--danger);border:1px solid rgba(160,88,88,0.2); }
+
 .settings-recommend { margin-top:var(--space-md);padding:var(--space-md);background:rgba(112,148,186,0.04);border-radius:var(--radius-lg);border:1px solid var(--border-subtle); }
 .settings-recommend strong { font-size:13px;color:var(--accent);display:block;margin-bottom:4px; }
 .settings-recommend p { font-size:11px;color:var(--text-dim);line-height:1.7;font-family:var(--font-mono); }

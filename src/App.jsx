@@ -528,11 +528,38 @@ function SettingsModal({ open, onClose, toast }) {
   const [ep, setEp] = useState(cfg.baseURL);
   const [key, setKey] = useState(cfg.apiKey);
   const [mdl, setMdl] = useState(cfg.model);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState('');
   const ripple = useRipple();
 
   const switchProvider = (pkey) => {
     const c = selectProvider(pkey);
     setProvider(pkey); setEp(c.baseURL); setMdl(c.model);
+  };
+
+  const testConnection = async () => {
+    setTesting(true); setTestResult('');
+    const url = (ep||cfg.baseURL).replace(/\/$/,'') + '/v1/messages';
+    try {
+      const headers = {
+        'Content-Type':'application/json',
+        [cfg.authHeader||'Authorization']: (cfg.authPrefix||'Bearer ') + (key||cfg.apiKey),
+      };
+      const body = JSON.stringify({model:mdl||cfg.model, max_tokens:5, messages:[{role:'user',content:'hi'}]});
+      const res = await fetch(url, {method:'POST', headers, body, signal:AbortSignal.timeout(10000)});
+      if (res.ok) {
+        const data = await res.json();
+        setTestResult(`连接成功! 模型: ${data.model||mdl} 已就绪。`);
+        toast('success','API连接测试通过');
+      } else {
+        const err = await res.text().catch(()=>'');
+        setTestResult(`HTTP ${res.status}: ${err.slice(0,150)}`);
+        toast('danger',`连接失败: HTTP ${res.status}`);
+      }
+    } catch(e) {
+      setTestResult(`网络错误: ${e.message}`);
+      toast('danger',`连接失败: ${e.message}`);
+    } finally { setTesting(false); }
   };
 
   return (
@@ -550,7 +577,13 @@ function SettingsModal({ open, onClose, toast }) {
           <label className="setting-label">API 端点</label><input className="setting-input" value={ep} onChange={e=>setEp(e.target.value)}/>
           <label className="setting-label">API Key</label><input className="setting-input" type="password" value={key} onChange={e=>setKey(e.target.value)}/>
           <label className="setting-label">模型</label><input className="setting-input" value={mdl} onChange={e=>setMdl(e.target.value)}/>
-          <button className="btn-save ripple-container" onClick={e=>{ripple(e);updateConfig({baseURL:ep,apiKey:key,model:mdl});setApiKey(key);toast('success','设置已保存');onClose();}}>保存配置</button>
+          <div style={{display:'flex',gap:8}}>
+            <button className="btn-save ripple-container" onClick={e=>{ripple(e);updateConfig({baseURL:ep,apiKey:key,model:mdl});setApiKey(key);setApiEnabled(true);toast('success','设置已保存，API已自动启用');onClose();}} style={{flex:1}}>保存并启用</button>
+            <button className="btn-save ripple-container" onClick={()=>testConnection()} disabled={testing} style={{flex:1,background:'var(--bg-elevated)',border:'1px solid var(--border-default)'}}>
+              {testing?'测试中...':'测试连接'}
+            </button>
+          </div>
+          {testResult && <div className={`api-test-result ${testResult.includes('成功')?'success':'fail'}`}>{testResult}</div>}
           <div className="settings-recommend">
             <strong>推荐设置 (DeepSeek):</strong>
             <p>端点: https://api.deepseek.com/anthropic<br/>模型: deepseek-v4-pro[1m]<br/>API Key: 从 platform.deepseek.com 获取</p>
