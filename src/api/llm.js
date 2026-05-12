@@ -6,15 +6,17 @@ export const PROVIDERS = {
     name:'DeepSeek (推荐)', baseURL:'https://api.deepseek.com/anthropic',
     model:'deepseek-v4-pro[1m]', authHeader:'Authorization', authPrefix:'Bearer ',
     endpoint:'/v1/messages', streamEndpoint:'/v1/messages',
-    bodyBuilder:(model,messages)=>({model,max_tokens:2048,temperature:0.85,stream:false,messages}),
-    responseParser:(data)=>data.choices?.[0]?.message?.content||data.content?.[0]?.text||'',
-    streamParser:(chunk)=>chunk.choices?.[0]?.delta?.content||'',
+    systemAsTopLevel:true, // DeepSeek Anthropic format: system is top-level param
+    bodyBuilder:(model,system,messages)=>({model,max_tokens:2048,temperature:0.85,stream:false,system,messages}),
+    responseParser:(data)=>data.content?.[0]?.text||data.choices?.[0]?.message?.content||'',
+    streamParser:(chunk)=>chunk.type==='content_block_delta'?chunk.delta?.text:chunk.choices?.[0]?.delta?.content||'',
   },
   openai: {
     name:'OpenAI-compatible', baseURL:'https://api.openai.com/v1',
     model:'gpt-4o', authHeader:'Authorization', authPrefix:'Bearer ',
     endpoint:'/chat/completions', streamEndpoint:'/chat/completions',
-    bodyBuilder:(model,messages)=>({model,max_tokens:2048,temperature:0.85,messages}),
+    systemAsTopLevel:false, // OpenAI: system inside messages array
+    bodyBuilder:(model,system,messages)=>({model,max_tokens:2048,temperature:0.85,messages:[{role:'system',content:system},...messages]}),
     responseParser:(data)=>data.choices?.[0]?.message?.content||'',
     streamParser:(chunk)=>chunk.choices?.[0]?.delta?.content||'',
   },
@@ -22,7 +24,8 @@ export const PROVIDERS = {
     name:'Anthropic (官方)', baseURL:'https://api.anthropic.com',
     model:'claude-sonnet-4-6', authHeader:'x-api-key', authPrefix:'',
     endpoint:'/v1/messages', streamEndpoint:'/v1/messages',
-    bodyBuilder:(model,messages)=>({model,max_tokens:2048,temperature:0.85,messages}),
+    systemAsTopLevel:true, // Anthropic: system is top-level param
+    bodyBuilder:(model,system,messages)=>({model,max_tokens:2048,temperature:0.85,system,messages}),
     responseParser:(data)=>data.content?.[0]?.text||'',
     streamParser:(chunk)=>chunk.type==='content_block_delta'?chunk.delta?.text:chunk.delta?.text||'',
   },
@@ -62,19 +65,17 @@ export function loadConfig() {
 
 function buildMessages(context) {
   const history = (context.storyLog||[]).map(e=>({role:e.role==='player'?'user':'assistant',content:e.content}));
-  return [
-    {role:'system',content:context.systemPrompt||config.systemPrompt||'你是一个沉浸式文字冒险RPG的游戏主持人。'},
-    ...history.slice(-20),
-  ];
+  return history.slice(-20);
 }
 
 export async function sendGameMessage(context) {
   const messages = buildMessages(context);
-  const body = config.bodyBuilder(config.model, messages);
+  const system = context.systemPrompt||'你是一个沉浸式文字冒险RPG的游戏主持人。';
+  const body = config.bodyBuilder(config.model, system, messages);
   body.stream = false;
 
   const headers = {
-    'Content-Type':'application/json',
+    'Content-Type':'application/json; charset=utf-8',
     [config.authHeader]: config.authPrefix + config.apiKey,
   };
 
@@ -86,7 +87,7 @@ export async function sendGameMessage(context) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errText.slice(0,300)}`);
+    throw new Error(`HTTP ${response.status}: ${errText.slice(0,400)}`);
   }
 
   const data = await response.json();
@@ -95,11 +96,12 @@ export async function sendGameMessage(context) {
 
 export async function* streamGameMessage(context) {
   const messages = buildMessages(context);
-  const body = config.bodyBuilder(config.model, messages);
+  const system = context.systemPrompt||'你是一个沉浸式文字冒险RPG的游戏主持人。';
+  const body = config.bodyBuilder(config.model, system, messages);
   body.stream = true;
 
   const headers = {
-    'Content-Type':'application/json',
+    'Content-Type':'application/json; charset=utf-8',
     [config.authHeader]: config.authPrefix + config.apiKey,
   };
 
@@ -111,11 +113,11 @@ export async function* streamGameMessage(context) {
 
   if (!response.ok) {
     const errText = await response.text();
-    throw new Error(`HTTP ${response.status}: ${errText.slice(0,300)}`);
+    throw new Error(`HTTP ${response.status}: ${errText.slice(0,400)}`);
   }
 
   const reader = response.body.getReader();
-  const decoder = new TextDecoder();
+  const decoder = new TextDecoder('utf-8');
   let buffer = '';
   while (true) {
     const {done, value} = await reader.read();

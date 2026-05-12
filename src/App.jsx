@@ -873,7 +873,8 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
           const locOpts=opts[loc]||opts.crossroads;
           return locOpts[t]||locOpts.morning;
         })();
-        setStoryLog(prev=>[...prev,{role:'narrator',content:diceDisplay+locBasedOptions.map((o,i)=>`[选项]${o}`).join('\n'),diceResult:shouldRoll?{...check,label:'探索检定'}:null}]);
+        const sceneText = (currentNode?.desc||'').split('\n')[0];
+        setStoryLog(prev=>[...prev,{role:'narrator',content:diceDisplay+sceneText+'\n'+locBasedOptions.map((o,i)=>`[选项]${o}`).join('\n'),diceResult:shouldRoll?{...check,label:'探索检定'}:null}]);
         setQuickReplies(locBasedOptions);
         if(Math.random()<0.2){const m=monsters[Math.floor(Math.random()*monsters.length)];setCombat({active:true,monster:{...m,hp:m.maxHp},playerState:{...player,hp:player.hp,mp:player.mp}});toast('warning',`遭遇了${m.name}！`);}
       }
@@ -890,7 +891,7 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
     const story = sceneStories[node.id]||node.desc;
     setStoryLog(prev=>[...prev,{role:'player',content:`前往「${node.name}」。`},{role:'narrator',content:story}]);
     toast('success',`到达「${node.name}」`);
-    if (node.npcHere) { setNpcDialog(npcs[node.npcHere]); }
+    // Don't auto-open NPC dialog - let player choose to interact
   },[toast]);
 
   // === COMBAT ===
