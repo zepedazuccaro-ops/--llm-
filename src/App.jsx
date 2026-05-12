@@ -885,8 +885,6 @@ export default function App() {
     const diceKw=['探索','调查','战斗','攻击','潜行','偷','说服','恐吓','闪避','格斗','聆听','侦查','搜寻','跟踪','攀爬'];
     const shouldRoll=diceKw.some(k=>input.includes(k));
     const diceResult=shouldRoll?skillCheck(50):null;
-    const actType=diceKw.some(k=>input.includes(k))?'exploration':'social';
-    const diceResult=shouldRoll?skillCheck(50):null;
     const diceMsg=(diceResult&&autoSendDice)
       ?`\n[骰子:${diceResult.roll} vs 50→${diceResult.level==='extreme'?'极难成功':diceResult.level==='hard'?'困难成功':diceResult.level}]`
       :'';
@@ -930,10 +928,14 @@ ${diceMsg?`\n[本次骰子]${diceMsg}`:''}`;
         const optionMatches=resp.match(/\[选项\](.*?)(?=\[选项\]|$)/gs)||[];
         const narrative=narrativeMatch?narrativeMatch[1].trim():resp;
         const options=optionMatches.map(o=>o.replace('[选项]','').trim()).filter(Boolean);
-        // Apply variable updates
+        // Extract thinking chain
+        const thinkMatch=resp.match(/\[THINKING\]([\s\S]*?)\[\/THINKING\]/);
+        const thinking=thinkMatch?thinkMatch[1].trim():'';
+        const displayText=thinking?resp.replace(/\[THINKING\][\s\S]*?\[\/THINKING\]\n?/,''):resp;
         try{if(varsMatch){const vars=JSON.parse(varsMatch[1].trim());if(vars.hp_change)setPlayer(p=>({...p,hp:Math.max(1,Math.min(p.maxHp,p.hp+vars.hp_change))}));if(vars.items_gained?.length){setInventory(pi=>{const ni={...pi};vars.items_gained.forEach(it=>{ni[it]=(ni[it]||0)+1});return ni;});vars.items_gained.forEach(it=>toast('success',`获得「${it}」`));}}}catch(e){}
         setQuickReplies(options.length>=2?options.slice(0,4):['继续向前探索','仔细观察周围环境','与附近的人交谈']);
-        setStoryLog(prev=>[...prev,{role:'narrator',content:narrative,diceResult:diceResult&&diceResult.level!=='regular'?{...diceResult,label:'行动检定'}:null}]);
+        setStoryLog(prev=>[...prev,{role:'narrator',content:thinking?`[THINKING]${thinking}[/THINKING]\n${narrative}`:narrative,
+          thinking:thinking||null,diceResult:diceResult&&diceResult.level!=='regular'?{...diceResult,label:'行动检定'}:null}]);
       } else {
         await new Promise(r=>setTimeout(r,500+Math.random()*800));
         const check=skillCheck(45+Math.floor(Math.random()*20));

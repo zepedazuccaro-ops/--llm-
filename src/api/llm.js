@@ -7,8 +7,17 @@ export const PROVIDERS = {
     model:'deepseek-v4-pro[1m]', authHeader:'Authorization', authPrefix:'Bearer ',
     endpoint:'/v1/messages', streamEndpoint:'/v1/messages',
     systemAsTopLevel:true, // DeepSeek Anthropic format: system is top-level param
-    bodyBuilder:(model,system,messages)=>({model,max_tokens:2048,temperature:0.85,stream:false,system,messages}),
-    responseParser:(data)=>data.content?.[0]?.text||data.choices?.[0]?.message?.content||'',
+    bodyBuilder:(model,system,messages)=>({model,max_tokens:4096,temperature:0.85,stream:false,system,messages}),
+    responseParser:(data)=>{
+      const textBlock=(data.content||[]).find(c=>c.type==='text');
+      const thinkingBlock=(data.content||[]).find(c=>c.type==='thinking');
+      const text=textBlock?.text||'';
+      const thinking=thinkingBlock?.thinking||'';
+      // Fallback: if no text but choices exist (OpenAI compat)
+      if(!text && data.choices) return data.choices[0]?.message?.content||'';
+      // Return both for thinking display
+      return thinking?`[THINKING]${thinking}[/THINKING]\n${text}`:text;
+    },
     streamParser:(chunk)=>chunk.type==='content_block_delta'?chunk.delta?.text:chunk.choices?.[0]?.delta?.content||'',
   },
   openai: {
